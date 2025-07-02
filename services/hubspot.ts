@@ -23,6 +23,11 @@ interface HubSpotCompany {
   industry: string;
   numberofemployees?: string;
   state: string;
+  city?: string;
+  phone?: string;
+  website?: string;
+  description?: string;
+  // Custom properties - only set if they exist in HubSpot
   primary_formation?: string;
   drilling_activity_level?: string;
   geological_staff_size?: string;
@@ -81,28 +86,83 @@ class HubSpotService {
     }
   }
 
-  // Company Methods
-  async createCompany(companyData: HubSpotCompany) {
-    const properties = {
+  // Helper method to create safe properties object with only standard HubSpot properties
+  private createSafeCompanyProperties(companyData: HubSpotCompany) {
+    // Standard HubSpot company properties that always exist
+    const standardProperties: any = {
       name: companyData.name,
-      domain: companyData.domain,
       industry: companyData.industry,
-      numberofemployees: companyData.numberofemployees,
       state: companyData.state,
-      primary_formation: companyData.primary_formation,
-      drilling_activity_level: companyData.drilling_activity_level,
-      geological_staff_size: companyData.geological_staff_size,
-      recent_permits_count: companyData.recent_permits_count,
-      last_permit_date: companyData.last_permit_date,
-      hs_lead_status: companyData.status,
     };
 
+    // Optional standard properties
+    if (companyData.domain) standardProperties.domain = companyData.domain;
+    if (companyData.numberofemployees) standardProperties.numberofemployees = companyData.numberofemployees;
+    if (companyData.city) standardProperties.city = companyData.city;
+    if (companyData.phone) standardProperties.phone = companyData.phone;
+    if (companyData.website) standardProperties.website = companyData.website;
+
+    // Create description with custom data
+    const customData = [];
+    if (companyData.primary_formation) customData.push(`Primary Formation: ${companyData.primary_formation}`);
+    if (companyData.drilling_activity_level) customData.push(`Drilling Activity: ${companyData.drilling_activity_level}`);
+    if (companyData.geological_staff_size) customData.push(`Geological Staff: ${companyData.geological_staff_size}`);
+    if (companyData.recent_permits_count) customData.push(`Recent Permits: ${companyData.recent_permits_count}`);
+    if (companyData.last_permit_date) customData.push(`Last Permit Date: ${companyData.last_permit_date}`);
+    if (companyData.status) customData.push(`Status: ${companyData.status}`);
+
+    if (customData.length > 0) {
+      const existingDescription = companyData.description || '';
+      standardProperties.description = existingDescription + 
+        (existingDescription ? '\n\n' : '') + 
+        'Geological Data:\n' + customData.join('\n');
+    } else if (companyData.description) {
+      standardProperties.description = companyData.description;
+    }
+
+    return standardProperties;
+  }
+
+  // Helper method to create safe contact properties
+  private createSafeContactProperties(contactData: HubSpotContact) {
+    // Standard HubSpot contact properties
+    const standardProperties: any = {
+      email: contactData.email,
+      firstname: contactData.firstname,
+      lastname: contactData.lastname,
+      jobtitle: contactData.jobtitle,
+      company: contactData.company,
+    };
+
+    // Optional standard properties
+    if (contactData.phone) standardProperties.phone = contactData.phone;
+    if (contactData.hs_lead_status) standardProperties.hs_lead_status = contactData.hs_lead_status;
+
+    // Create notes with custom data
+    const customData = [];
+    if (contactData.geological_expertise) customData.push(`Expertise: ${contactData.geological_expertise}`);
+    if (contactData.years_experience) customData.push(`Experience: ${contactData.years_experience} years`);
+    if (contactData.education) customData.push(`Education: ${contactData.education}`);
+    if (contactData.last_contact_date) customData.push(`Last Contact: ${contactData.last_contact_date}`);
+
+    if (customData.length > 0) {
+      // Store custom data in notes field or description if available
+      standardProperties.notes_last_contacted = customData.join('; ');
+    }
+
+    return standardProperties;
+  }
+
+  // Company Methods
+  async createCompany(companyData: HubSpotCompany) {
+    const properties = this.createSafeCompanyProperties(companyData);
     return this.makeRequest('/crm/v3/objects/companies', 'POST', { properties });
   }
 
   async updateCompany(hubspotId: string, companyData: Partial<HubSpotCompany>) {
+    const properties = this.createSafeCompanyProperties(companyData as HubSpotCompany);
     return this.makeRequest(`/crm/v3/objects/companies/${hubspotId}`, 'PATCH', {
-      properties: companyData
+      properties
     });
   }
 
@@ -122,26 +182,14 @@ class HubSpotService {
 
   // Contact Methods
   async createContact(contactData: HubSpotContact) {
-    const properties = {
-      email: contactData.email,
-      firstname: contactData.firstname,
-      lastname: contactData.lastname,
-      jobtitle: contactData.jobtitle,
-      phone: contactData.phone,
-      company: contactData.company,
-      hs_lead_status: contactData.hs_lead_status || 'NEW',
-      geological_expertise: contactData.geological_expertise,
-      years_experience: contactData.years_experience,
-      education: contactData.education,
-      last_contact_date: contactData.last_contact_date,
-    };
-
+    const properties = this.createSafeContactProperties(contactData);
     return this.makeRequest('/crm/v3/objects/contacts', 'POST', { properties });
   }
 
   async updateContact(hubspotId: string, contactData: Partial<HubSpotContact>) {
+    const properties = this.createSafeContactProperties(contactData as HubSpotContact);
     return this.makeRequest(`/crm/v3/objects/contacts/${hubspotId}`, 'PATCH', {
-      properties: contactData
+      properties
     });
   }
 
@@ -161,16 +209,26 @@ class HubSpotService {
 
   // Deal Methods
   async createDeal(dealData: HubSpotDeal) {
-    const properties = {
+    // Only use standard deal properties
+    const properties: any = {
       dealname: dealData.dealname,
-      amount: dealData.amount,
       dealstage: dealData.dealstage,
       pipeline: dealData.pipeline,
-      closedate: dealData.closedate,
-      deal_type: dealData.deal_type,
-      formation_target: dealData.formation_target,
-      permit_location: dealData.permit_location,
     };
+
+    // Optional standard properties
+    if (dealData.amount) properties.amount = dealData.amount;
+    if (dealData.closedate) properties.closedate = dealData.closedate;
+
+    // Put custom data in description
+    const customData = [];
+    if (dealData.deal_type) customData.push(`Type: ${dealData.deal_type}`);
+    if (dealData.formation_target) customData.push(`Formation: ${dealData.formation_target}`);
+    if (dealData.permit_location) customData.push(`Location: ${dealData.permit_location}`);
+
+    if (customData.length > 0) {
+      properties.description = customData.join('\n');
+    }
 
     return this.makeRequest('/crm/v3/objects/deals', 'POST', { properties });
   }

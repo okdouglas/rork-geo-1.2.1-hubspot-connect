@@ -97,14 +97,15 @@ export const useHubSpotStore = create<HubSpotStore>()(
             name: company.name,
             industry: 'Oil & Gas',
             state: company.state,
+            numberofemployees: company.size === 'Small' ? '1-10' : 
+                              company.size === 'Medium' ? '11-50' : '51-200',
+            // Custom data will be stored in description
             primary_formation: company.primaryFormation,
             drilling_activity_level: company.drillingActivityLevel,
             geological_staff_size: company.geologicalStaffSize.toString(),
             recent_permits_count: company.recentPermitsCount.toString(),
             last_permit_date: company.lastPermitDate,
             status: company.status,
-            numberofemployees: company.size === 'Small' ? '10-50' : 
-                              company.size === 'Medium' ? '51-200' : '200+',
           };
 
           if (existingCompany.results && existingCompany.results.length > 0) {
@@ -117,6 +118,7 @@ export const useHubSpotStore = create<HubSpotStore>()(
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
           addSyncError(`Failed to sync company: ${errorMessage}`);
+          console.error('Company sync error:', error);
           return false;
         }
       },
@@ -155,6 +157,8 @@ export const useHubSpotStore = create<HubSpotStore>()(
             jobtitle: contact.title,
             phone: contact.phone,
             company: company?.name || '',
+            hs_lead_status: 'NEW',
+            // Custom data will be stored in notes
             geological_expertise: contact.expertise.join(', '),
             years_experience: contact.yearsExperience?.toString(),
             education: contact.education,
@@ -182,6 +186,7 @@ export const useHubSpotStore = create<HubSpotStore>()(
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
           addSyncError(`Failed to sync contact: ${errorMessage}`);
+          console.error('Contact sync error:', error);
           return false;
         }
       },
@@ -210,11 +215,12 @@ export const useHubSpotStore = create<HubSpotStore>()(
             
             // Update existing company with new data
             const updateData = {
-              industry: lead.industry,
-              state: lead.location,
+              name: lead.companyName,
+              industry: lead.industry || 'Oil & Gas',
+              state: lead.location || 'Unknown',
               domain: lead.website,
-              numberofemployees: lead.size,
-              hs_lead_status: 'NEW',
+              numberofemployees: lead.size || 'Unknown',
+              description: lead.description,
             };
             
             await hubspotService.updateCompany(companyId, updateData);
@@ -222,10 +228,11 @@ export const useHubSpotStore = create<HubSpotStore>()(
             // Create new company
             const companyData = {
               name: lead.companyName,
-              industry: lead.industry,
-              state: lead.location,
+              industry: lead.industry || 'Oil & Gas',
+              state: lead.location || 'Unknown',
               domain: lead.website,
               numberofemployees: lead.size || 'Unknown',
+              description: lead.description,
             };
             
             const newCompany = await hubspotService.createCompany(companyData);
@@ -245,7 +252,7 @@ export const useHubSpotStore = create<HubSpotStore>()(
                 email: lead.contact.email,
                 firstname: firstname,
                 lastname: lastname,
-                jobtitle: lead.contact.title,
+                jobtitle: lead.contact.title || 'Unknown',
                 company: lead.companyName,
                 hs_lead_status: 'NEW',
               };
@@ -258,11 +265,13 @@ export const useHubSpotStore = create<HubSpotStore>()(
           }
 
           // Create a note about the lead source
-          await hubspotService.createNote(
-            `Lead sourced from LinkedIn search on ${new Date(lead.foundAt).toLocaleDateString()}. Industry: ${lead.industry}. Location: ${lead.location}.${lead.description ? ` Description: ${lead.description}` : ''}`,
-            'company',
-            companyId
-          );
+          const noteContent = `Lead sourced from LinkedIn search on ${new Date(lead.foundAt).toLocaleDateString()}.
+Industry: ${lead.industry || 'Oil & Gas'}
+Location: ${lead.location || 'Unknown'}
+${lead.description ? `Description: ${lead.description}` : ''}
+${lead.website ? `Website: ${lead.website}` : ''}`;
+
+          await hubspotService.createNote(noteContent, 'company', companyId);
 
           // Mark lead as synced
           leadStore.markAsSynced(leadId, companyId);
@@ -288,6 +297,8 @@ export const useHubSpotStore = create<HubSpotStore>()(
           
           for (const company of companyStore.companies) {
             await get().syncCompany(company.id);
+            // Add delay to avoid rate limiting
+            await new Promise(resolve => setTimeout(resolve, 500));
           }
           
           set(state => ({
@@ -316,6 +327,8 @@ export const useHubSpotStore = create<HubSpotStore>()(
           
           for (const contact of contactStore.contacts) {
             await get().syncContact(contact.id);
+            // Add delay to avoid rate limiting
+            await new Promise(resolve => setTimeout(resolve, 500));
           }
           
           set(state => ({
@@ -357,10 +370,11 @@ export const useHubSpotStore = create<HubSpotStore>()(
             dealname: `${company?.name || 'Unknown'} - ${permit.formationTarget} Opportunity`,
             dealstage: 'appointmentscheduled',
             pipeline: 'default',
+            closedate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(), // 90 days from now
+            // Custom data will be stored in description
             deal_type: 'New Permit Opportunity',
             formation_target: permit.formationTarget,
             permit_location: `${permit.county} County, ${permit.state}`,
-            closedate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(), // 90 days from now
           };
 
           const newDeal = await hubspotService.createDeal(dealData);
@@ -385,16 +399,19 @@ export const useHubSpotStore = create<HubSpotStore>()(
           }
 
           // Add note about the permit
-          await hubspotService.createNote(
-            `New drilling permit filed for ${permit.formationTarget} in ${permit.county} County, ${permit.state}. Filed on ${permit.filingDate}. Location: Section ${permit.location.section}-${permit.location.township}-${permit.location.range}`,
-            'deal',
-            newDeal.id
-          );
+          const noteContent = `New drilling permit filed for ${permit.formationTarget} in ${permit.county} County, ${permit.state}.
+Filed on: ${permit.filingDate}
+Location: Section ${permit.location.section}-${permit.location.township}-${permit.location.range}
+Permit Type: ${permit.type}
+Status: ${permit.status}`;
+
+          await hubspotService.createNote(noteContent, 'deal', newDeal.id);
 
           return true;
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
           addSyncError(`Failed to create deal: ${errorMessage}`);
+          console.error('Deal creation error:', error);
           return false;
         }
       },
