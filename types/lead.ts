@@ -43,3 +43,10 @@ export interface PermitData {
   depth?: number;
   apiNumber?: string;
 }
+
+export interface SearchProgress {
+  currentPage: number;
+  totalPages: number;
+  totalResults: number;
+  status: string;
+}

@@ -101,7 +101,7 @@ const LeadCard: React.FC<LeadCardProps> = ({ lead, onSync, syncIcon, canSync }) 
           
           {lead.serpApiData && (
             <View style={styles.sourceBadge}>
-              <Text style={styles.sourceText}>SerpAPI</Text>
+              <Text style={styles.sourceText}>Google</Text>
             </View>
           )}
         </View>

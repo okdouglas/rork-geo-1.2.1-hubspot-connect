@@ -21,44 +21,109 @@ interface SerpAPIResponse {
   error?: string;
 }
 
+interface SearchProgress {
+  currentPage: number;
+  totalPages: number;
+  totalResults: number;
+  status: string;
+}
+
 const SERPAPI_KEY = 'faa714c5a68ea6e43e50b99d000f512a8d67553765f6d7e7f95cdca376dcb314';
 const SERPAPI_BASE_URL = 'https://serpapi.com/search.json';
+const MAX_PAGES = 5;
+const RESULTS_PER_PAGE = 10;
 
-export async function searchOilGasCompanies(state: 'Oklahoma' | 'Kansas'): Promise<Lead[]> {
+export async function searchOilGasCompanies(
+  state: 'Oklahoma' | 'Kansas',
+  onProgress?: (progress: SearchProgress) => void
+): Promise<Lead[]> {
   try {
     const query = `Oil and Gas companies in ${state}`;
+    const allResults: SerpAPILocalResult[] = [];
+    const startValues = [0, 10, 20, 30, 40]; // 5 pages of results
     
-    const params = new URLSearchParams({
-      api_key: SERPAPI_KEY,
-      engine: 'google',
-      q: query,
-      tbm: 'lcl', // Local results
-      num: '20', // Number of results
+    onProgress?.({
+      currentPage: 0,
+      totalPages: MAX_PAGES,
+      totalResults: 0,
+      status: 'Starting search...'
     });
 
-    const response = await fetch(`${SERPAPI_BASE_URL}?${params.toString()}`);
-    
-    if (!response.ok) {
-      throw new Error(`SerpAPI request failed: ${response.status} ${response.statusText}`);
+    for (let i = 0; i < startValues.length; i++) {
+      const start = startValues[i];
+      const currentPage = i + 1;
+      
+      onProgress?.({
+        currentPage,
+        totalPages: MAX_PAGES,
+        totalResults: allResults.length,
+        status: `Fetching page ${currentPage} of ${MAX_PAGES}...`
+      });
+
+      try {
+        const params = new URLSearchParams({
+          api_key: SERPAPI_KEY,
+          engine: 'google',
+          q: query,
+          tbm: 'lcl', // Local results
+          num: RESULTS_PER_PAGE.toString(),
+          start: start.toString(),
+        });
+
+        const response = await fetch(`${SERPAPI_BASE_URL}?${params.toString()}`);
+        
+        if (!response.ok) {
+          console.warn(`SerpAPI request failed for page ${currentPage}: ${response.status} ${response.statusText}`);
+          continue; // Skip this page but continue with others
+        }
+
+        const data: SerpAPIResponse = await response.json();
+
+        if (data.error) {
+          console.warn(`SerpAPI error for page ${currentPage}: ${data.error}`);
+          continue; // Skip this page but continue with others
+        }
+
+        if (data.local_results && data.local_results.length > 0) {
+          allResults.push(...data.local_results);
+        }
+
+        // Add a small delay between requests to avoid rate limiting
+        if (i < startValues.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+
+      } catch (error) {
+        console.warn(`Error fetching page ${currentPage}:`, error);
+        continue; // Skip this page but continue with others
+      }
     }
 
-    const data: SerpAPIResponse = await response.json();
+    onProgress?.({
+      currentPage: MAX_PAGES,
+      totalPages: MAX_PAGES,
+      totalResults: allResults.length,
+      status: 'Processing results...'
+    });
 
-    if (data.error) {
-      throw new Error(`SerpAPI error: ${data.error}`);
-    }
-
-    if (!data.local_results || data.local_results.length === 0) {
-      console.warn('No local results found from SerpAPI, using fallback data');
+    if (allResults.length === 0) {
+      console.warn('No results found from SerpAPI across all pages, using fallback data');
       return generateFallbackData(state);
     }
 
+    // Deduplicate results
+    const deduplicatedResults = deduplicateResults(allResults);
+    
+    onProgress?.({
+      currentPage: MAX_PAGES,
+      totalPages: MAX_PAGES,
+      totalResults: deduplicatedResults.length,
+      status: `Found ${deduplicatedResults.length} unique companies`
+    });
+
     // Convert SerpAPI results to Lead format
-    const leads: Lead[] = data.local_results.map((result, index) => {
-      // Extract company name and clean it up
+    const leads: Lead[] = deduplicatedResults.map((result, index) => {
       const companyName = result.title || 'Unknown Company';
-      
-      // Try to extract contact info from snippet or use available data
       const contact = extractContactInfo(result);
       
       return {
@@ -85,10 +150,93 @@ export async function searchOilGasCompanies(state: 'Oklahoma' | 'Kansas'): Promi
   } catch (error) {
     console.error('SerpAPI search error:', error);
     
+    onProgress?.({
+      currentPage: 0,
+      totalPages: MAX_PAGES,
+      totalResults: 0,
+      status: 'Search failed, using fallback data'
+    });
+    
     // Fallback to mock data if SerpAPI fails
     console.warn('Falling back to mock data due to SerpAPI error');
     return generateFallbackData(state);
   }
+}
+
+function deduplicateResults(results: SerpAPILocalResult[]): SerpAPILocalResult[] {
+  const seen = new Set<string>();
+  const deduplicated: SerpAPILocalResult[] = [];
+
+  for (const result of results) {
+    const key = generateDeduplicationKey(result);
+    
+    if (!seen.has(key)) {
+      seen.add(key);
+      deduplicated.push(result);
+    }
+  }
+
+  return deduplicated;
+}
+
+function generateDeduplicationKey(result: SerpAPILocalResult): string {
+  // Create a unique key based on company name, domain, and phone
+  const name = normalizeCompanyName(result.title || '');
+  const domain = extractDomain(result.link || '');
+  const phone = normalizePhone(result.phone || '');
+  
+  // Use the most specific identifier available
+  if (phone) {
+    return `phone:${phone}`;
+  }
+  
+  if (domain) {
+    return `domain:${domain}`;
+  }
+  
+  if (name) {
+    return `name:${name}`;
+  }
+  
+  // Fallback to a combination if individual fields aren't unique enough
+  return `combined:${name}|${domain}|${phone}`;
+}
+
+function normalizeCompanyName(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/[^\w\s]/g, '') // Remove special characters
+    .replace(/\b(inc|llc|corp|corporation|company|co|ltd|limited)\b/g, '') // Remove common suffixes
+    .trim();
+}
+
+function extractDomain(url: string): string {
+  if (!url) return '';
+  
+  try {
+    const urlObj = new URL(url.startsWith('http') ? url : `https://${url}`);
+    return urlObj.hostname.toLowerCase().replace(/^www\./, '');
+  } catch {
+    return '';
+  }
+}
+
+function normalizePhone(phone: string): string {
+  if (!phone) return '';
+  
+  // Remove all non-digit characters
+  const digits = phone.replace(/\D/g, '');
+  
+  // Return normalized format for US numbers
+  if (digits.length === 10) {
+    return digits;
+  } else if (digits.length === 11 && digits.startsWith('1')) {
+    return digits.substring(1);
+  }
+  
+  return digits;
 }
 
 function extractContactInfo(result: SerpAPILocalResult) {

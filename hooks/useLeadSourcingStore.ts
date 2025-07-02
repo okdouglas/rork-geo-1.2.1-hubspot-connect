@@ -2,16 +2,29 @@ import { create } from 'zustand';
 import { Lead } from '@/types/lead';
 import { searchOilGasCompanies } from '@/lib/serpapi';
 
+interface SearchProgress {
+  currentPage: number;
+  totalPages: number;
+  totalResults: number;
+  status: string;
+}
+
 interface LeadSourcingStore {
   leads: Lead[];
   isLoading: boolean;
   error: string | null;
   selectedState: 'Oklahoma' | 'Kansas' | null;
+  searchProgress: SearchProgress | null;
   syncStatus: {
     totalFound: number;
     totalSynced: number;
     lastSearch: string | null;
     lastSearchState: string | null;
+  };
+  filters: {
+    companyName: string;
+    hasWebsite: boolean;
+    hasPhone: boolean;
   };
   setSelectedState: (state: 'Oklahoma' | 'Kansas') => void;
   searchLeadsByState: (state: 'Oklahoma' | 'Kansas') => Promise<void>;
@@ -21,6 +34,8 @@ interface LeadSourcingStore {
   clearLeads: () => void;
   clearError: () => void;
   markAsSynced: (leadId: string, hubSpotId: string) => void;
+  setFilters: (filters: Partial<LeadSourcingStore['filters']>) => void;
+  getFilteredLeads: () => Lead[];
 }
 
 export const useLeadSourcingStore = create<LeadSourcingStore>((set, get) => ({
@@ -28,11 +43,17 @@ export const useLeadSourcingStore = create<LeadSourcingStore>((set, get) => ({
   isLoading: false,
   error: null,
   selectedState: null,
+  searchProgress: null,
   syncStatus: {
     totalFound: 0,
     totalSynced: 0,
     lastSearch: null,
     lastSearchState: null,
+  },
+  filters: {
+    companyName: '',
+    hasWebsite: false,
+    hasPhone: false,
   },
 
   setSelectedState: (state) => {
@@ -40,14 +61,32 @@ export const useLeadSourcingStore = create<LeadSourcingStore>((set, get) => ({
   },
 
   searchLeadsByState: async (state: 'Oklahoma' | 'Kansas') => {
-    set({ isLoading: true, error: null, selectedState: state });
+    set({ 
+      isLoading: true, 
+      error: null, 
+      selectedState: state,
+      searchProgress: {
+        currentPage: 0,
+        totalPages: 5,
+        totalResults: 0,
+        status: 'Initializing search...'
+      }
+    });
     
     try {
-      const results = await searchOilGasCompanies(state);
+      const results = await searchOilGasCompanies(state, (progress) => {
+        set({ searchProgress: progress });
+      });
       
       set({ 
         leads: results,
         isLoading: false,
+        searchProgress: {
+          currentPage: 5,
+          totalPages: 5,
+          totalResults: results.length,
+          status: `Search complete - Found ${results.length} companies`
+        },
         syncStatus: {
           totalFound: results.length,
           totalSynced: results.filter(l => l.syncedToHubSpot).length,
@@ -59,7 +98,8 @@ export const useLeadSourcingStore = create<LeadSourcingStore>((set, get) => ({
       const errorMessage = error instanceof Error ? error.message : 'Failed to search for leads';
       set({ 
         error: errorMessage,
-        isLoading: false 
+        isLoading: false,
+        searchProgress: null
       });
     }
   },
@@ -104,6 +144,7 @@ export const useLeadSourcingStore = create<LeadSourcingStore>((set, get) => ({
     set({ 
       leads: [],
       selectedState: null,
+      searchProgress: null,
       syncStatus: {
         totalFound: 0,
         totalSynced: 0,
@@ -129,5 +170,34 @@ export const useLeadSourcingStore = create<LeadSourcingStore>((set, get) => ({
         totalSynced: state.syncStatus.totalSynced + 1,
       }
     }));
+  },
+
+  setFilters: (newFilters) => {
+    set(state => ({
+      filters: { ...state.filters, ...newFilters }
+    }));
+  },
+
+  getFilteredLeads: () => {
+    const { leads, filters } = get();
+    
+    return leads.filter(lead => {
+      // Company name filter
+      if (filters.companyName && !lead.companyName.toLowerCase().includes(filters.companyName.toLowerCase())) {
+        return false;
+      }
+      
+      // Website filter
+      if (filters.hasWebsite && !lead.website) {
+        return false;
+      }
+      
+      // Phone filter
+      if (filters.hasPhone && !lead.contact?.phone) {
+        return false;
+      }
+      
+      return true;
+    });
   },
 }));

@@ -21,7 +21,9 @@ import {
   AlertCircle,
   RefreshCw,
   Upload,
-  Database
+  Database,
+  Filter,
+  Phone
 } from 'lucide-react-native';
 import { colors } from '@/constants/colors';
 import { useLeadSourcingStore } from '@/hooks/useLeadSourcingStore';
@@ -35,12 +37,16 @@ export default function LeadSourcingScreen() {
     isLoading, 
     error, 
     selectedState,
+    searchProgress,
     syncStatus,
+    filters,
     setSelectedState,
     searchLeadsByState,
     searchLeads, 
     clearLeads,
-    clearError
+    clearError,
+    setFilters,
+    getFilteredLeads
   } = useLeadSourcingStore();
   
   const { syncStatus: hubspotStatus, syncLeadToHubSpot } = useHubSpotStore();
@@ -48,6 +54,9 @@ export default function LeadSourcingScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [syncingLeads, setSyncingLeads] = useState<Set<string>>(new Set());
   const [searchMode, setSearchMode] = useState<'state' | 'custom'>('state');
+  const [showFilters, setShowFilters] = useState(false);
+
+  const filteredLeads = getFilteredLeads();
 
   const handleStateSearch = async (state: 'Oklahoma' | 'Kansas') => {
     await searchLeadsByState(state);
@@ -100,8 +109,8 @@ export default function LeadSourcingScreen() {
     return <Zap size={16} color={colors.primary} />;
   };
 
-  const unsyncedLeads = leads.filter(lead => !lead.syncedToHubSpot);
-  const syncedLeads = leads.filter(lead => lead.syncedToHubSpot);
+  const unsyncedLeads = filteredLeads.filter(lead => !lead.syncedToHubSpot);
+  const syncedLeads = filteredLeads.filter(lead => lead.syncedToHubSpot);
 
   return (
     <View style={styles.container}>
@@ -209,31 +218,102 @@ export default function LeadSourcingScreen() {
         </View>
       )}
 
-      {/* Search Results Info */}
-      {syncStatus.lastSearch && (
-        <View style={styles.searchInfo}>
-          <Text style={styles.searchInfoText}>
-            Last search: {syncStatus.lastSearchState || 'Custom'} • {new Date(syncStatus.lastSearch).toLocaleDateString()}
+      {/* Search Progress */}
+      {isLoading && searchProgress && (
+        <View style={styles.progressContainer}>
+          <View style={styles.progressHeader}>
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={styles.progressText}>{searchProgress.status}</Text>
+          </View>
+          <View style={styles.progressBar}>
+            <View 
+              style={[
+                styles.progressFill, 
+                { width: `${(searchProgress.currentPage / searchProgress.totalPages) * 100}%` }
+              ]} 
+            />
+          </View>
+          <Text style={styles.progressDetails}>
+            Page {searchProgress.currentPage} of {searchProgress.totalPages} • {searchProgress.totalResults} results
           </Text>
         </View>
       )}
 
-      <View style={styles.statsContainer}>
-        <View style={styles.statItem}>
-          <Building size={16} color={colors.primary} />
-          <Text style={styles.statText}>{leads.length} leads found</Text>
+      {/* Search Results Info */}
+      {syncStatus.lastSearch && !isLoading && (
+        <View style={styles.searchInfo}>
+          <Text style={styles.searchInfoText}>
+            Last search: {syncStatus.lastSearchState || 'Custom'} • {new Date(syncStatus.lastSearch).toLocaleDateString()} • Found {leads.length} companies
+          </Text>
         </View>
-        
-        <View style={styles.statItem}>
-          <CheckCircle size={16} color={colors.success} />
-          <Text style={styles.statText}>{syncedLeads.length} synced</Text>
+      )}
+
+      {/* Stats and Filters */}
+      {leads.length > 0 && (
+        <View style={styles.statsContainer}>
+          <View style={styles.statsRow}>
+            <View style={styles.statItem}>
+              <Building size={16} color={colors.primary} />
+              <Text style={styles.statText}>{filteredLeads.length} leads shown</Text>
+            </View>
+            
+            <View style={styles.statItem}>
+              <CheckCircle size={16} color={colors.success} />
+              <Text style={styles.statText}>{syncedLeads.length} synced</Text>
+            </View>
+            
+            <View style={styles.statItem}>
+              <Upload size={16} color={colors.warning} />
+              <Text style={styles.statText}>{unsyncedLeads.length} pending</Text>
+            </View>
+          </View>
+
+          <TouchableOpacity 
+            style={styles.filterButton}
+            onPress={() => setShowFilters(!showFilters)}
+          >
+            <Filter size={16} color={colors.primary} />
+            <Text style={styles.filterButtonText}>Filters</Text>
+          </TouchableOpacity>
         </View>
-        
-        <View style={styles.statItem}>
-          <Upload size={16} color={colors.warning} />
-          <Text style={styles.statText}>{unsyncedLeads.length} pending</Text>
+      )}
+
+      {/* Filters */}
+      {showFilters && (
+        <View style={styles.filtersContainer}>
+          <View style={styles.filterRow}>
+            <TextInput
+              style={styles.filterInput}
+              placeholder="Filter by company name..."
+              value={filters.companyName}
+              onChangeText={(text) => setFilters({ companyName: text })}
+              placeholderTextColor={colors.textSecondary}
+            />
+          </View>
+          
+          <View style={styles.filterRow}>
+            <TouchableOpacity 
+              style={[styles.filterToggle, filters.hasWebsite && styles.activeFilterToggle]}
+              onPress={() => setFilters({ hasWebsite: !filters.hasWebsite })}
+            >
+              <Globe size={16} color={filters.hasWebsite ? 'white' : colors.primary} />
+              <Text style={[styles.filterToggleText, filters.hasWebsite && styles.activeFilterToggleText]}>
+                Has Website
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[styles.filterToggle, filters.hasPhone && styles.activeFilterToggle]}
+              onPress={() => setFilters({ hasPhone: !filters.hasPhone })}
+            >
+              <Phone size={16} color={filters.hasPhone ? 'white' : colors.primary} />
+              <Text style={[styles.filterToggleText, filters.hasPhone && styles.activeFilterToggleText]}>
+                Has Phone
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      )}
 
       {/* HubSpot Sync Section */}
       {leads.length > 0 && (
@@ -292,7 +372,7 @@ export default function LeadSourcingScreen() {
           </View>
         )}
 
-        {leads.map(lead => (
+        {filteredLeads.map(lead => (
           <LeadCard 
             key={lead.id} 
             lead={lead}
@@ -302,12 +382,22 @@ export default function LeadSourcingScreen() {
           />
         ))}
 
+        {leads.length > 0 && filteredLeads.length === 0 && (
+          <View style={styles.emptyContainer}>
+            <Filter size={48} color={colors.textSecondary} />
+            <Text style={styles.emptyTitle}>No Results Match Filters</Text>
+            <Text style={styles.emptyText}>
+              Try adjusting your filters to see more results
+            </Text>
+          </View>
+        )}
+
         {leads.length === 0 && !isLoading && !error && (
           <View style={styles.emptyContainer}>
             <Search size={48} color={colors.textSecondary} />
             <Text style={styles.emptyTitle}>Find Your Next Prospects</Text>
             <Text style={styles.emptyText}>
-              Select a state to search for Oil & Gas companies using real-time data from Google
+              Select a state to search for Oil & Gas companies using comprehensive data from Google
             </Text>
           </View>
         )}
@@ -428,6 +518,39 @@ const styles = StyleSheet.create({
   disabledButton: {
     opacity: 0.6,
   },
+  progressContainer: {
+    backgroundColor: 'rgba(26, 115, 232, 0.05)',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  progressHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  progressText: {
+    fontSize: 14,
+    color: colors.text,
+    fontWeight: '500',
+  },
+  progressBar: {
+    height: 4,
+    backgroundColor: 'rgba(26, 115, 232, 0.1)',
+    borderRadius: 2,
+    marginBottom: 4,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: colors.primary,
+    borderRadius: 2,
+  },
+  progressDetails: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
   searchInfo: {
     backgroundColor: 'rgba(26, 115, 232, 0.05)',
     paddingHorizontal: 16,
@@ -442,12 +565,17 @@ const styles = StyleSheet.create({
   },
   statsContainer: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
     backgroundColor: 'white',
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 16,
   },
   statItem: {
@@ -458,6 +586,63 @@ const styles = StyleSheet.create({
   statText: {
     fontSize: 14,
     color: colors.textSecondary,
+  },
+  filterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  filterButtonText: {
+    fontSize: 14,
+    color: colors.primary,
+  },
+  filtersContainer: {
+    backgroundColor: 'white',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    gap: 12,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  filterInput: {
+    flex: 1,
+    height: 40,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    color: colors.text,
+  },
+  filterToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    backgroundColor: 'white',
+  },
+  activeFilterToggle: {
+    backgroundColor: colors.primary,
+  },
+  filterToggleText: {
+    fontSize: 14,
+    color: colors.primary,
+  },
+  activeFilterToggleText: {
+    color: 'white',
   },
   syncSection: {
     backgroundColor: 'white',
