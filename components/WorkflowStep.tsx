@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { WorkflowStep as WorkflowStepType } from '@/types';
 import { colors } from '@/constants/colors';
-import { Check, Mail, Calendar, Phone, ClipboardList, Search } from 'lucide-react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 
 interface WorkflowStepProps {
   step: WorkflowStepType;
@@ -27,15 +27,15 @@ const WorkflowStep: React.FC<WorkflowStepProps> = ({
   const getStepIcon = () => {
     switch (step.type) {
       case 'Email':
-        return <Mail size={16} color="white" />;
+        return <MaterialIcons name="email" size={16} color="white" />;
       case 'Task':
-        return <ClipboardList size={16} color="white" />;
+        return <MaterialIcons name="assignment" size={16} color="white" />;
       case 'Call':
-        return <Phone size={16} color="white" />;
+        return <MaterialIcons name="phone" size={16} color="white" />;
       case 'Research':
-        return <Search size={16} color="white" />;
+        return <MaterialIcons name="search" size={16} color="white" />;
       default:
-        return <Calendar size={16} color="white" />;
+        return <MaterialIcons name="event" size={16} color="white" />;
     }
   };
 
@@ -51,7 +51,7 @@ const WorkflowStep: React.FC<WorkflowStepProps> = ({
           ]}
           onPress={handleToggle}
         >
-          {step.isCompleted ? <Check size={16} color="white" /> : getStepIcon()}
+          {step.isCompleted ? <MaterialIcons name="check" size={16} color="white" /> : getStepIcon()}
         </TouchableOpacity>
         
         <View style={styles.stepDetails}>

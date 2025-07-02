@@ -1,15 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { 
-  BarChart, 
-  Building2, 
-  FileText, 
-  ListChecks, 
-  PercentSquare,
-  Calendar,
-  GanttChartSquare
-} from 'lucide-react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { colors } from '@/constants/colors';
 import { useDashboardStore } from '@/hooks/useDashboardStore';
 import { usePermitStore } from '@/hooks/usePermitStore';
@@ -43,7 +35,7 @@ export default function DashboardScreen() {
             <StatCard
               title="New Permits"
               value={stats.newPermits}
-              icon={<FileText size={20} color={colors.primary} />}
+              icon={<MaterialIcons name="description" size={20} color={colors.primary} />}
               suffix="last 30 days"
             />
           </View>
@@ -52,7 +44,7 @@ export default function DashboardScreen() {
             <StatCard
               title="Active Workflows"
               value={stats.activeWorkflows}
-              icon={<ListChecks size={20} color={colors.secondary} />}
+              icon={<MaterialIcons name="checklist" size={20} color={colors.secondary} />}
               color={colors.secondary}
             />
           </View>
@@ -61,7 +53,7 @@ export default function DashboardScreen() {
             <StatCard
               title="Total Prospects"
               value={stats.totalProspects}
-              icon={<Building2 size={20} color="#FBBC05" />}
+              icon={<MaterialIcons name="business" size={20} color="#FBBC05" />}
               color="#FBBC05"
             />
           </View>
@@ -71,7 +63,7 @@ export default function DashboardScreen() {
               title="Response Rate"
               value={stats.responseRate}
               suffix="%"
-              icon={<PercentSquare size={20} color="#34A853" />}
+              icon={<MaterialIcons name="percent" size={20} color="#34A853" />}
               color="#34A853"
             />
           </View>
@@ -79,7 +71,7 @@ export default function DashboardScreen() {
         
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <GanttChartSquare size={18} color={colors.primary} />
+            <MaterialIcons name="timeline" size={18} color={colors.primary} />
             <Text style={styles.sectionTitle}>Activity by State</Text>
           </View>
           
@@ -117,7 +109,7 @@ export default function DashboardScreen() {
         
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Calendar size={18} color={colors.primary} />
+            <MaterialIcons name="event" size={18} color={colors.primary} />
             <Text style={styles.sectionTitle}>Recent Activity</Text>
           </View>
           

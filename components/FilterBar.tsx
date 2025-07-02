@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { Filter, X } from 'lucide-react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { colors } from '@/constants/colors';
 
 interface FilterOption {
@@ -32,7 +32,7 @@ const FilterBar: React.FC<FilterBarProps> = ({ title, options, selectedId, onSel
   return (
     <View style={styles.container}>
       <TouchableOpacity style={styles.filterButton} onPress={toggleExpand}>
-        <Filter size={16} color={colors.primary} />
+        <MaterialIcons name="filter-list" size={16} color={colors.primary} />
         <Text style={styles.filterText}>{title}: </Text>
         <Text style={styles.selectedText}>{selectedOption?.label || 'All'}</Text>
       </TouchableOpacity>
@@ -42,7 +42,7 @@ const FilterBar: React.FC<FilterBarProps> = ({ title, options, selectedId, onSel
           <View style={styles.optionsHeader}>
             <Text style={styles.optionsTitle}>{title}</Text>
             <TouchableOpacity onPress={toggleExpand}>
-              <X size={20} color={colors.textSecondary} />
+              <MaterialIcons name="close" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
           <ScrollView style={styles.optionsList} showsVerticalScrollIndicator={false}>

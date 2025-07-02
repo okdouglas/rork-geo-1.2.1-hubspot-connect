@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
-import { BadgeCheck, Briefcase, GraduationCap, Calendar } from 'lucide-react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { Contact } from '@/types';
 import { colors } from '@/constants/colors';
 
@@ -23,7 +23,7 @@ const ContactCard: React.FC<ContactCardProps> = ({ contact, companyName }) => {
         <View style={styles.nameContainer}>
           <Text style={styles.name}>{contact.name}</Text>
           {contact.recentPublications && contact.recentPublications.length > 0 && (
-            <BadgeCheck size={16} color={colors.primary} />
+            <MaterialIcons name="verified" size={16} color={colors.primary} />
           )}
         </View>
         <Text style={styles.title}>{contact.title}</Text>
@@ -31,21 +31,21 @@ const ContactCard: React.FC<ContactCardProps> = ({ contact, companyName }) => {
 
       {companyName && (
         <View style={styles.infoRow}>
-          <Briefcase size={16} color={colors.textSecondary} />
+          <MaterialIcons name="work" size={16} color={colors.textSecondary} />
           <Text style={styles.infoText}>{companyName}</Text>
         </View>
       )}
 
       {contact.education && (
         <View style={styles.infoRow}>
-          <GraduationCap size={16} color={colors.textSecondary} />
+          <MaterialIcons name="school" size={16} color={colors.textSecondary} />
           <Text style={styles.infoText}>{contact.education}</Text>
         </View>
       )}
 
       {contact.lastContactDate && (
         <View style={styles.infoRow}>
-          <Calendar size={16} color={colors.textSecondary} />
+          <MaterialIcons name="event" size={16} color={colors.textSecondary} />
           <Text style={styles.infoText}>
             Last contact: {contact.lastContactDate.split('-').slice(1).join('/')}
           </Text>

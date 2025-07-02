@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { FileText, MapPin, Calendar, Building, Layers } from 'lucide-react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { PermitData } from '@/types/lead';
 import { colors } from '@/constants/colors';
 
@@ -48,34 +48,34 @@ const PermitDataCard: React.FC<PermitDataCardProps> = ({ permit, onPress }) => {
       </View>
 
       <View style={styles.infoRow}>
-        <MapPin size={16} color={colors.textSecondary} />
+        <MaterialIcons name="location-on" size={16} color={colors.textSecondary} />
         <Text style={styles.infoText}>
           {permit.location.county} County, {permit.location.state}
         </Text>
       </View>
 
       <View style={styles.infoRow}>
-        <Layers size={16} color={colors.textSecondary} />
+        <MaterialIcons name="layers" size={16} color={colors.textSecondary} />
         <Text style={styles.infoText}>
           Sec {permit.location.section}-{permit.location.township}-{permit.location.range}
         </Text>
       </View>
 
       <View style={styles.infoRow}>
-        <Calendar size={16} color={colors.textSecondary} />
+        <MaterialIcons name="event" size={16} color={colors.textSecondary} />
         <Text style={styles.infoText}>Filed: {formatDate(permit.filingDate)}</Text>
       </View>
 
       <View style={styles.footer}>
         <View style={styles.detailsContainer}>
           <View style={styles.detailItem}>
-            <Building size={14} color={colors.textSecondary} />
+            <MaterialIcons name="business" size={14} color={colors.textSecondary} />
             <Text style={styles.detailText}>{permit.wellType}</Text>
           </View>
           
           {permit.formation && (
             <View style={styles.detailItem}>
-              <FileText size={14} color={colors.textSecondary} />
+              <MaterialIcons name="description" size={14} color={colors.textSecondary} />
               <Text style={styles.detailText}>{permit.formation}</Text>
             </View>
           )}

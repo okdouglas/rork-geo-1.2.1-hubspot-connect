@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
-import { Building, MapPin, Users, Globe, Mail, ExternalLink } from 'lucide-react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { Lead } from '@/types/lead';
 import { colors } from '@/constants/colors';
 
@@ -46,13 +46,13 @@ const LeadCard: React.FC<LeadCardProps> = ({ lead, onSync, syncIcon, canSync }) 
       </View>
 
       <View style={styles.infoRow}>
-        <MapPin size={16} color={colors.textSecondary} />
+        <MaterialIcons name="location-on" size={16} color={colors.textSecondary} />
         <Text style={styles.infoText}>{lead.location}</Text>
       </View>
 
       {lead.size && (
         <View style={styles.infoRow}>
-          <Users size={16} color={colors.textSecondary} />
+          <MaterialIcons name="group" size={16} color={colors.textSecondary} />
           <Text style={styles.infoText}>{lead.size}</Text>
         </View>
       )}
@@ -69,7 +69,7 @@ const LeadCard: React.FC<LeadCardProps> = ({ lead, onSync, syncIcon, canSync }) 
             <Text style={styles.contactRole}>{lead.contact.title}</Text>
             {lead.contact.email && (
               <TouchableOpacity onPress={handleContactEmail} style={styles.contactAction}>
-                <Mail size={14} color={colors.primary} />
+                <MaterialIcons name="email" size={14} color={colors.primary} />
                 <Text style={styles.contactEmail}>{lead.contact.email}</Text>
               </TouchableOpacity>
             )}
@@ -81,17 +81,17 @@ const LeadCard: React.FC<LeadCardProps> = ({ lead, onSync, syncIcon, canSync }) 
         <View style={styles.linksContainer}>
           {lead.website && (
             <TouchableOpacity style={styles.linkButton} onPress={handleWebsitePress}>
-              <Globe size={14} color={colors.primary} />
+              <MaterialIcons name="public" size={14} color={colors.primary} />
               <Text style={styles.linkText}>Website</Text>
-              <ExternalLink size={12} color={colors.primary} />
+              <MaterialIcons name="open-in-new" size={12} color={colors.primary} />
             </TouchableOpacity>
           )}
           
           {lead.linkedInUrl && (
             <TouchableOpacity style={styles.linkButton} onPress={handleLinkedInPress}>
-              <Building size={14} color={colors.primary} />
+              <MaterialIcons name="business" size={14} color={colors.primary} />
               <Text style={styles.linkText}>LinkedIn</Text>
-              <ExternalLink size={12} color={colors.primary} />
+              <MaterialIcons name="open-in-new" size={12} color={colors.primary} />
             </TouchableOpacity>
           )}
         </View>

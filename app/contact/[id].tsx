@@ -1,17 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { 
-  Briefcase, 
-  GraduationCap, 
-  Mail, 
-  Phone, 
-  Calendar, 
-  Award, 
-  Users, 
-  Linkedin,
-  ArrowUpRight 
-} from 'lucide-react-native';
+import { MaterialIcons, FontAwesome } from '@expo/vector-icons';
 import { colors } from '@/constants/colors';
 import { useContactStore } from '@/hooks/useContactStore';
 import { useCompanyStore } from '@/hooks/useCompanyStore';
@@ -60,7 +50,7 @@ export default function ContactDetailsScreen() {
         
         {company && (
           <View style={styles.companyContainer}>
-            <Briefcase size={16} color={colors.textSecondary} />
+            <MaterialIcons name="work" size={16} color={colors.textSecondary} />
             <Text style={styles.companyName}>{company.name}</Text>
           </View>
         )}
@@ -74,7 +64,7 @@ export default function ContactDetailsScreen() {
         {contact.email && (
           <TouchableOpacity style={styles.actionButton} onPress={handleEmail}>
             <View style={[styles.actionIcon, { backgroundColor: 'rgba(26, 115, 232, 0.1)' }]}>
-              <Mail size={20} color={colors.primary} />
+              <MaterialIcons name="email" size={20} color={colors.primary} />
             </View>
             <Text style={styles.actionText}>Email</Text>
           </TouchableOpacity>
@@ -83,7 +73,7 @@ export default function ContactDetailsScreen() {
         {contact.phone && (
           <TouchableOpacity style={styles.actionButton} onPress={handlePhone}>
             <View style={[styles.actionIcon, { backgroundColor: 'rgba(111, 207, 151, 0.1)' }]}>
-              <Phone size={20} color={colors.secondary} />
+              <MaterialIcons name="phone" size={20} color={colors.secondary} />
             </View>
             <Text style={styles.actionText}>Call</Text>
           </TouchableOpacity>
@@ -92,7 +82,7 @@ export default function ContactDetailsScreen() {
         {contact.linkedInUrl && (
           <TouchableOpacity style={styles.actionButton} onPress={handleLinkedIn}>
             <View style={[styles.actionIcon, { backgroundColor: 'rgba(26, 115, 232, 0.1)' }]}>
-              <Linkedin size={20} color={colors.primary} />
+              <FontAwesome name="linkedin" size={20} color={colors.primary} />
             </View>
             <Text style={styles.actionText}>LinkedIn</Text>
           </TouchableOpacity>
@@ -104,35 +94,35 @@ export default function ContactDetailsScreen() {
         
         {contact.email && (
           <View style={styles.detailRow}>
-            <Mail size={16} color={colors.textSecondary} />
+            <MaterialIcons name="email" size={16} color={colors.textSecondary} />
             <Text style={styles.detailText}>{contact.email}</Text>
           </View>
         )}
         
         {contact.phone && (
           <View style={styles.detailRow}>
-            <Phone size={16} color={colors.textSecondary} />
+            <MaterialIcons name="phone" size={16} color={colors.textSecondary} />
             <Text style={styles.detailText}>{contact.phone}</Text>
           </View>
         )}
         
         {contact.education && (
           <View style={styles.detailRow}>
-            <GraduationCap size={16} color={colors.textSecondary} />
+            <MaterialIcons name="school" size={16} color={colors.textSecondary} />
             <Text style={styles.detailText}>{contact.education}</Text>
           </View>
         )}
         
         {contact.yearsExperience && (
           <View style={styles.detailRow}>
-            <Briefcase size={16} color={colors.textSecondary} />
+            <MaterialIcons name="work" size={16} color={colors.textSecondary} />
             <Text style={styles.detailText}>{contact.yearsExperience} years experience</Text>
           </View>
         )}
         
         {contact.lastContactDate && (
           <View style={styles.detailRow}>
-            <Calendar size={16} color={colors.textSecondary} />
+            <MaterialIcons name="event" size={16} color={colors.textSecondary} />
             <Text style={styles.detailText}>Last contacted: {contact.lastContactDate}</Text>
           </View>
         )}
@@ -152,14 +142,14 @@ export default function ContactDetailsScreen() {
         {contact.recentPublications && contact.recentPublications.length > 0 && (
           <View style={styles.publicationsContainer}>
             <View style={styles.detailRow}>
-              <Award size={16} color={colors.textSecondary} />
+              <MaterialIcons name="star" size={16} color={colors.textSecondary} />
               <Text style={styles.publicationTitle}>Recent Publications</Text>
             </View>
             
             {contact.recentPublications.map((publication, index) => (
               <View key={index} style={styles.publicationItem}>
                 <Text style={styles.publicationText}>{publication}</Text>
-                <ArrowUpRight size={14} color={colors.primary} />
+                <MaterialIcons name="north-east" size={14} color={colors.primary} />
               </View>
             ))}
           </View>
@@ -171,7 +161,7 @@ export default function ContactDetailsScreen() {
           <Text style={styles.sectionTitle}>Mutual Connections</Text>
           
           <View style={styles.detailRow}>
-            <Users size={16} color={colors.textSecondary} />
+            <MaterialIcons name="group" size={16} color={colors.textSecondary} />
             <Text style={styles.detailText}>
               Connected through {contact.mutualConnections.join(", ")}
             </Text>

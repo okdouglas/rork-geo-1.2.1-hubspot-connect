@@ -1,15 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { 
-  MapPin, 
-  Building2, 
-  CalendarDays, 
-  Layers, 
-  ClipboardList, 
-  ChevronRight,
-  ArrowRight
-} from 'lucide-react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { colors } from '@/constants/colors';
 import { usePermitStore } from '@/hooks/usePermitStore';
 import { useCompanyStore } from '@/hooks/useCompanyStore';
@@ -87,11 +79,11 @@ export default function PermitDetailsScreen() {
         </View>
         
         <TouchableOpacity style={styles.companyContainer} onPress={handleCompanyPress}>
-          <Building2 size={16} color={colors.textSecondary} />
+          <MaterialIcons name="business" size={16} color={colors.textSecondary} />
           <Text style={styles.companyName}>
             {company?.name || 'Unknown Company'}
           </Text>
-          <ChevronRight size={16} color={colors.textSecondary} />
+          <MaterialIcons name="chevron-right" size={16} color={colors.textSecondary} />
         </TouchableOpacity>
         
         <View style={styles.syncButtonContainer}>
@@ -103,28 +95,28 @@ export default function PermitDetailsScreen() {
         <Text style={styles.sectionTitle}>Permit Information</Text>
         
         <View style={styles.detailRow}>
-          <MapPin size={16} color={colors.textSecondary} />
+          <MaterialIcons name="location-on" size={16} color={colors.textSecondary} />
           <Text style={styles.detailText}>
             {permit.county} County, {permit.state}
           </Text>
         </View>
         
         <View style={styles.detailRow}>
-          <Layers size={16} color={colors.textSecondary} />
+          <MaterialIcons name="layers" size={16} color={colors.textSecondary} />
           <Text style={styles.detailText}>
             Section {permit.location.section}, Township {permit.location.township}, Range {permit.location.range}
           </Text>
         </View>
         
         <View style={styles.detailRow}>
-          <CalendarDays size={16} color={colors.textSecondary} />
+          <MaterialIcons name="event" size={16} color={colors.textSecondary} />
           <Text style={styles.detailText}>
             Filed on {formatDate(permit.filingDate)}
           </Text>
         </View>
         
         <View style={styles.detailRow}>
-          <ClipboardList size={16} color={colors.textSecondary} />
+          <MaterialIcons name="assignment" size={16} color={colors.textSecondary} />
           <Text style={styles.detailText}>
             {permit.type} well
           </Text>
@@ -160,7 +152,7 @@ export default function PermitDetailsScreen() {
                 <Text style={styles.workflowName}>{workflow.name}</Text>
                 <Text style={styles.workflowTrigger}>{workflow.trigger}</Text>
               </View>
-              <ArrowRight size={16} color={colors.primary} />
+              <MaterialIcons name="arrow-forward" size={16} color={colors.primary} />
             </TouchableOpacity>
           ))}
         </View>

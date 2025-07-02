@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { EmailTemplate } from '@/types';
 import { colors } from '@/constants/colors';
-import { Edit, Copy, Check } from 'lucide-react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 
 interface TemplatePreviewProps {
   template: EmailTemplate;
@@ -32,14 +32,14 @@ const TemplatePreview: React.FC<TemplatePreviewProps> = ({ template, onEdit }) =
         <View style={styles.actionsContainer}>
           {onEdit && (
             <TouchableOpacity style={styles.actionButton} onPress={onEdit}>
-              <Edit size={18} color={colors.primary} />
+              <MaterialIcons name="edit" size={18} color={colors.primary} />
             </TouchableOpacity>
           )}
           <TouchableOpacity style={styles.actionButton} onPress={handleCopy}>
             {copied ? (
-              <Check size={18} color={colors.success} />
+              <MaterialIcons name="check" size={18} color={colors.success} />
             ) : (
-              <Copy size={18} color={colors.primary} />
+              <MaterialIcons name="content-copy" size={18} color={colors.primary} />
             )}
           </TouchableOpacity>
         </View>
