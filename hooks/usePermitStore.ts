@@ -37,6 +37,7 @@ type PermitStore = {
     thisMonth: number;
   };
   clearError: () => void;
+  initializeWeekRanges: () => void;
 };
 
 export const usePermitStore = create<PermitStore>((set, get) => ({
@@ -53,7 +54,11 @@ export const usePermitStore = create<PermitStore>((set, get) => ({
   isLoading: false,
   error: null,
   lastFetch: null,
-  weekRanges: getWeekRanges(6),
+  weekRanges: [],
+  
+  initializeWeekRanges: () => {
+    set({ weekRanges: getWeekRanges(6) });
+  },
   
   setSelectedPermit: (permit) => set({ selectedPermit: permit }),
   
