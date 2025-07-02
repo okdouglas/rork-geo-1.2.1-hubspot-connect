@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { hubspotService, HubSpotConfig, SyncResult } from '@/services/hubspot';
 import { Company } from '@/types';
 import { Contact } from '@/types';
-import { Permit } from '@/types';
+import { PermitData } from '@/types/lead';
 import { Lead } from '@/types/lead';
 
 interface HubSpotSyncStatus {
@@ -31,6 +31,7 @@ interface HubSpotStore {
   syncCompany: (companyId: string) => Promise<SyncResultSummary>;
   syncContact: (contactId: string) => Promise<SyncResultSummary>;
   syncLeadToHubSpot: (leadId: string) => Promise<SyncResultSummary>;
+  syncPermitToHubSpot: (permitData: PermitData) => Promise<SyncResultSummary>;
   syncAllCompanies: () => Promise<void>;
   syncAllContacts: () => Promise<void>;
   createDealFromPermit: (permitId: string) => Promise<SyncResultSummary>;
@@ -407,6 +408,32 @@ ${lead.website ? `Website: ${lead.website}` : ''}`;
         }
       },
 
+      syncPermitToHubSpot: async (permitData): Promise<SyncResultSummary> => {
+        const { addSyncError, addSyncWarning } = get();
+        
+        try {
+          const result = await hubspotService.createDealFromPermitWithFallback(permitData);
+          
+          // Handle warnings for failed fields
+          if (result.errors.length > 0) {
+            result.errors.forEach(error => addSyncError(error));
+          }
+
+          return {
+            success: result.success,
+            warnings: result.errors, // Treat errors as warnings for permits since they're often non-critical
+            errors: result.success ? [] : result.errors,
+            hubspotId: result.id
+          };
+
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+          addSyncError(`Failed to sync permit: ${errorMessage}`);
+          console.error('Permit sync error:', error);
+          return { success: false, errors: [errorMessage], warnings: [] };
+        }
+      },
+
       syncAllCompanies: async () => {
         const { setSyncing, clearSyncErrors, clearSyncWarnings } = get();
         
@@ -474,91 +501,16 @@ ${lead.website ? `Website: ${lead.website}` : ''}`;
         
         try {
           const { usePermitStore } = await import('@/hooks/usePermitStore');
-          const { useCompanyStore } = await import('@/hooks/useCompanyStore');
-          const { useContactStore } = await import('@/hooks/useContactStore');
-          
           const permitStore = usePermitStore.getState();
-          const companyStore = useCompanyStore.getState();
-          const contactStore = useContactStore.getState();
           
-          const permit = permitStore.permits.find((p: Permit) => p.id === permitId);
+          const permit = permitStore.permits.find((p: PermitData) => p.id === permitId);
           if (!permit) {
             const error = `Permit ${permitId} not found`;
             addSyncError(error);
             return { success: false, errors: [error], warnings: [] };
           }
 
-          const company = companyStore.companies.find((c: Company) => c.id === permit.companyId);
-          const companyContacts = contactStore.contacts.filter((c: Contact) => c.companyId === permit.companyId);
-
-          const dealData = {
-            dealname: `${company?.name || 'Unknown'} - ${permit.formationTarget} Opportunity`,
-            dealstage: 'appointmentscheduled',
-            pipeline: 'default',
-            closedate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
-            deal_type: 'New Permit Opportunity',
-            formation_target: permit.formationTarget,
-            permit_location: `${permit.county} County, ${permit.state}`,
-          };
-
-          const newDeal = await hubspotService.createDeal(dealData);
-          const warnings: string[] = [];
-
-          // Associate with company
-          if (company) {
-            try {
-              const existingCompany = await hubspotService.searchCompanyByName(company.name);
-              if (existingCompany.results && existingCompany.results.length > 0) {
-                await hubspotService.associateDealWithCompany(newDeal.id, existingCompany.results[0].id);
-              }
-            } catch (associationError) {
-              const associationErrorMessage = associationError instanceof Error ? associationError.message : 'Unknown error occurred';
-              const warning = `Deal created but company association failed: ${associationErrorMessage}`;
-              addSyncWarning(warning);
-              warnings.push(warning);
-            }
-          }
-
-          // Associate with primary contact
-          if (companyContacts.length > 0) {
-            try {
-              const primaryContact = companyContacts.find((c: Contact) => c.title.includes('Chief') || c.title.includes('VP')) 
-                                   || companyContacts[0];
-              
-              const existingContact = await hubspotService.searchContactByEmail(primaryContact.email);
-              if (existingContact.results && existingContact.results.length > 0) {
-                await hubspotService.associateDealWithContact(newDeal.id, existingContact.results[0].id);
-              }
-            } catch (associationError) {
-              const associationErrorMessage = associationError instanceof Error ? associationError.message : 'Unknown error occurred';
-              const warning = `Deal created but contact association failed: ${associationErrorMessage}`;
-              addSyncWarning(warning);
-              warnings.push(warning);
-            }
-          }
-
-          // Add note about the permit
-          try {
-            const noteContent = `New drilling permit filed for ${permit.formationTarget} in ${permit.county} County, ${permit.state}.
-Filed on: ${permit.filingDate}
-Location: Section ${permit.location.section}-${permit.location.township}-${permit.location.range}
-Permit Type: ${permit.type}
-Status: ${permit.status}`;
-
-            await hubspotService.createNote(noteContent, 'deal', newDeal.id);
-          } catch (noteError) {
-            const noteErrorMessage = noteError instanceof Error ? noteError.message : 'Unknown error occurred';
-            const warning = `Deal created but note creation failed: ${noteErrorMessage}`;
-            addSyncWarning(warning);
-            warnings.push(warning);
-          }
-
-          return {
-            success: true,
-            warnings,
-            errors: [],
-            hubspotId: newDeal.id
-          };
+          return await get().syncPermitToHubSpot(permit);
 
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';

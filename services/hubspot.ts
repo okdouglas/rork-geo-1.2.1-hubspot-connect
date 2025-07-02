@@ -169,21 +169,62 @@ class HubSpotService {
     };
   }
 
-  // Helper method to create comprehensive notes from failed fields
-  private createFailedFieldsNote(failedFields: { [key: string]: any }, recordType: string): string {
-    if (Object.keys(failedFields).length === 0) return '';
-
-    const noteLines = [`Additional ${recordType} Data (Auto-synced):`];
+  // Helper method to create comprehensive notes from failed fields and permit data
+  private createPermitNote(permitData: any, failedFields: { [key: string]: any } = {}): string {
+    const noteLines = ['Drilling Permit Details:'];
     
-    Object.entries(failedFields).forEach(([key, value]) => {
-      const formattedKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-      noteLines.push(`• ${formattedKey}: ${value}`);
-    });
+    // Core permit information
+    if (permitData.operatorName) noteLines.push(`Operator: ${permitData.operatorName}`);
+    if (permitData.apiNumber) noteLines.push(`API Number: ${permitData.apiNumber}`);
+    if (permitData.wellType) noteLines.push(`Well Type: ${permitData.wellType}`);
+    if (permitData.location?.county && permitData.location?.state) {
+      noteLines.push(`County: ${permitData.location.county}, ${permitData.location.state}`);
+    }
+    if (permitData.filingDate) noteLines.push(`Permit Date: ${permitData.filingDate}`);
+    if (permitData.formation) noteLines.push(`Formation: ${permitData.formation}`);
+    if (permitData.depth) noteLines.push(`Depth: ${permitData.depth} ft`);
+    if (permitData.status) noteLines.push(`Status: ${permitData.status}`);
+    
+    // Location details
+    if (permitData.location?.section || permitData.location?.township || permitData.location?.range) {
+      const locationParts = [];
+      if (permitData.location.section) locationParts.push(`Sec ${permitData.location.section}`);
+      if (permitData.location.township) locationParts.push(`${permitData.location.township}`);
+      if (permitData.location.range) locationParts.push(`${permitData.location.range}`);
+      if (locationParts.length > 0) {
+        noteLines.push(`Location: ${locationParts.join('-')}`);
+      }
+    }
+    
+    // Permit source link
+    const permitUrl = this.getPermitUrl(permitData);
+    if (permitUrl) {
+      noteLines.push(`Source: ${permitUrl}`);
+    }
+    
+    // Failed fields if any
+    if (Object.keys(failedFields).length > 0) {
+      noteLines.push('');
+      noteLines.push('Additional Data (Field Restrictions):');
+      Object.entries(failedFields).forEach(([key, value]) => {
+        const formattedKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        noteLines.push(`• ${formattedKey}: ${value}`);
+      });
+    }
 
     noteLines.push('');
     noteLines.push(`Synced on: ${new Date().toLocaleDateString()}`);
     
     return noteLines.join('\n');
+  }
+
+  private getPermitUrl(permitData: any): string {
+    if (permitData.location?.state === 'Oklahoma' && permitData.apiNumber) {
+      return `https://ogwellbore.occ.ok.gov/WellBrowse.aspx?APINumber=${permitData.apiNumber}`;
+    } else if (permitData.location?.state === 'Kansas' && permitData.apiNumber) {
+      return `https://www.kgs.ku.edu/Magellan/Qualified/index.html?api=${permitData.apiNumber}`;
+    }
+    return '';
   }
 
   // Enhanced company creation with fallback
@@ -236,6 +277,71 @@ class HubSpotService {
     }
 
     return result;
+  }
+
+  // Enhanced permit-to-deal creation
+  async createDealFromPermitWithFallback(permitData: any): Promise<SyncResult> {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    
+    try {
+      // Create deal name from permit data
+      const dealName = `${permitData.operatorName} - ${permitData.formation || 'Drilling'} Opportunity`;
+      
+      const dealData = {
+        dealname: dealName,
+        dealstage: 'appointmentscheduled',
+        pipeline: 'default',
+        closedate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
+      };
+
+      const newDeal = await this.makeRequest('/crm/v3/objects/deals', 'POST', { properties: dealData });
+      
+      // Create comprehensive note with all permit details
+      try {
+        const noteContent = this.createPermitNote(permitData);
+        await this.createNote(noteContent, 'deal', newDeal.id);
+      } catch (noteError) {
+        const noteErrorMessage = noteError instanceof Error ? noteError.message : 'Unknown error occurred';
+        warnings.push(`Deal created but note creation failed: ${noteErrorMessage}`);
+      }
+
+      // Try to find and associate with company
+      try {
+        const existingCompany = await this.searchCompanyByName(permitData.operatorName);
+        if (existingCompany.results && existingCompany.results.length > 0) {
+          await this.associateDealWithCompany(newDeal.id, existingCompany.results[0].id);
+        } else {
+          // Create company if it doesn't exist
+          const companyData: HubSpotCompany = {
+            name: permitData.operatorName,
+            industry: 'Oil & Gas',
+            state: permitData.location?.state || 'Unknown',
+            description: `Oil & Gas operator with recent drilling permits`
+          };
+          
+          const companyResult = await this.createCompanyWithFallback(companyData);
+          if (companyResult.success && companyResult.id) {
+            await this.associateDealWithCompany(newDeal.id, companyResult.id);
+          }
+        }
+      } catch (associationError) {
+        const associationErrorMessage = associationError instanceof Error ? associationError.message : 'Unknown error occurred';
+        warnings.push(`Deal created but company association failed: ${associationErrorMessage}`);
+      }
+
+      return {
+        success: true,
+        id: newDeal.id,
+        failedFields: {},
+        errors: warnings // Treat warnings as non-critical errors
+      };
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      errors.push(`Failed to create deal: ${errorMessage}`);
+      return { success: false, failedFields: {}, errors };
+    }
   }
 
   // Enhanced update methods
@@ -291,6 +397,23 @@ class HubSpotService {
     }
 
     return result;
+  }
+
+  // Helper method to create comprehensive notes from failed fields
+  private createFailedFieldsNote(failedFields: { [key: string]: any }, recordType: string): string {
+    if (Object.keys(failedFields).length === 0) return '';
+
+    const noteLines = [`Additional ${recordType} Data (Auto-synced):`];
+    
+    Object.entries(failedFields).forEach(([key, value]) => {
+      const formattedKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+      noteLines.push(`• ${formattedKey}: ${value}`);
+    });
+
+    noteLines.push('');
+    noteLines.push(`Synced on: ${new Date().toLocaleDateString()}`);
+    
+    return noteLines.join('\n');
   }
 
   // Keep original methods for backward compatibility

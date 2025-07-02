@@ -1,30 +1,28 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Linking, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { MaterialIcons } from '@expo/vector-icons';
-import { Permit } from '@/types';
+import { ExternalLink, MapPin, Calendar, Building, Layers } from 'lucide-react-native';
+import { PermitData } from '@/types/lead';
 import { colors } from '@/constants/colors';
-import { useCompanyStore } from '@/hooks/useCompanyStore';
+import { getPermitUrl } from '@/lib/permits';
+import HubSpotSyncButton from '@/components/HubSpotSyncButton';
 
 interface PermitCardProps {
-  permit: Permit;
+  permit: PermitData;
 }
 
 const PermitCard: React.FC<PermitCardProps> = ({ permit }) => {
   const router = useRouter();
-  const { companies } = useCompanyStore();
-  
-  const company = companies.find(c => c.id === permit.companyId);
   
   const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'Filed':
+    switch (status.toLowerCase()) {
+      case 'filed':
         return colors.warning;
-      case 'Approved':
+      case 'approved':
         return colors.success;
-      case 'Drilling':
+      case 'drilling':
         return colors.primary;
-      case 'Completed':
+      case 'completed':
         return colors.textSecondary;
       default:
         return colors.textSecondary;
@@ -33,6 +31,26 @@ const PermitCard: React.FC<PermitCardProps> = ({ permit }) => {
 
   const handlePress = () => {
     router.push(`/permit/${permit.id}`);
+  };
+
+  const handleViewPermit = async () => {
+    const permitUrl = getPermitUrl(permit);
+    
+    if (!permitUrl) {
+      Alert.alert('Error', 'Permit link not available');
+      return;
+    }
+    
+    try {
+      const supported = await Linking.canOpenURL(permitUrl);
+      if (supported) {
+        await Linking.openURL(permitUrl);
+      } else {
+        Alert.alert('Error', 'Cannot open permit link');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to open permit link');
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -44,41 +62,72 @@ const PermitCard: React.FC<PermitCardProps> = ({ permit }) => {
     });
   };
 
+  const formatLocation = () => {
+    const { section, township, range } = permit.location;
+    if (section && township && range) {
+      return `Sec ${section}-${township}-${range}`;
+    }
+    return 'Location TBD';
+  };
+
   return (
     <TouchableOpacity style={styles.card} onPress={handlePress}>
       <View style={styles.header}>
-        <View>
-          <Text style={styles.formationText}>{permit.formationTarget}</Text>
-          <Text style={styles.companyName}>{company?.name || 'Unknown Company'}</Text>
+        <View style={styles.headerLeft}>
+          <Text style={styles.operatorName}>{permit.operatorName}</Text>
+          <Text style={styles.permitNumber}>#{permit.permitNumber}</Text>
         </View>
         <View style={[styles.statusBadge, { backgroundColor: getStatusColor(permit.status) }]}>
           <Text style={styles.statusText}>{permit.status}</Text>
         </View>
       </View>
       
+      {permit.formation && (
+        <View style={styles.infoRow}>
+          <Layers size={16} color={colors.textSecondary} />
+          <Text style={styles.infoText}>{permit.formation}</Text>
+        </View>
+      )}
+      
       <View style={styles.infoRow}>
-        <MaterialIcons name="location-on" size={16} color={colors.textSecondary} />
+        <MapPin size={16} color={colors.textSecondary} />
         <Text style={styles.infoText}>
-          {permit.county} County, {permit.state}
+          {permit.location.county} County, {permit.location.state}
         </Text>
       </View>
       
       <View style={styles.infoRow}>
-        <MaterialIcons name="layers" size={16} color={colors.textSecondary} />
-        <Text style={styles.infoText}>
-          Sec {permit.location.section}-{permit.location.township}-{permit.location.range}
-        </Text>
+        <Building size={16} color={colors.textSecondary} />
+        <Text style={styles.infoText}>{formatLocation()}</Text>
       </View>
       
       <View style={styles.infoRow}>
-        <MaterialIcons name="event" size={16} color={colors.textSecondary} />
+        <Calendar size={16} color={colors.textSecondary} />
         <Text style={styles.infoText}>Filed on {formatDate(permit.filingDate)}</Text>
       </View>
       
       <View style={styles.footer}>
         <View style={styles.typeContainer}>
-          <MaterialIcons name="business" size={14} color={colors.textSecondary} />
-          <Text style={styles.typeText}>{permit.type} well</Text>
+          <Text style={styles.typeText}>{permit.wellType} well</Text>
+          {permit.depth && (
+            <Text style={styles.depthText}> • {permit.depth.toLocaleString()} ft</Text>
+          )}
+        </View>
+        
+        <View style={styles.actionButtons}>
+          <HubSpotSyncButton 
+            type="permit" 
+            id={permit.id} 
+            style={styles.syncButton}
+          />
+          
+          <TouchableOpacity 
+            style={styles.viewPermitButton} 
+            onPress={handleViewPermit}
+          >
+            <ExternalLink size={14} color={colors.primary} />
+            <Text style={styles.viewPermitText}>View Permit</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </TouchableOpacity>
@@ -90,6 +139,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     borderRadius: 12,
     padding: 16,
+    marginHorizontal: 16,
     marginBottom: 12,
     borderWidth: 1,
     borderColor: colors.border,
@@ -100,12 +150,15 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: 12,
   },
-  formationText: {
+  headerLeft: {
+    flex: 1,
+  },
+  operatorName: {
     fontSize: 18,
     fontWeight: '600',
     color: colors.text,
   },
-  companyName: {
+  permitNumber: {
     fontSize: 14,
     color: colors.textSecondary,
     marginTop: 2,
@@ -129,21 +182,51 @@ const styles = StyleSheet.create({
   infoText: {
     color: colors.textSecondary,
     fontSize: 14,
+    flex: 1,
   },
   footer: {
-    marginTop: 8,
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-    alignItems: 'center',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
   typeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    marginBottom: 12,
   },
   typeText: {
     fontSize: 14,
     color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  depthText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  syncButton: {
+    flex: 1,
+    marginRight: 12,
+  },
+  viewPermitButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    gap: 6,
+  },
+  viewPermitText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '500',
   },
 });
 

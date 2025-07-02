@@ -1,14 +1,37 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { usePermitStore } from '@/hooks/usePermitStore';
 import { colors } from '@/constants/colors';
 import PermitCard from '@/components/PermitCard';
 import FilterBar from '@/components/FilterBar';
-import { Search, Plus } from 'lucide-react-native';
+import { Search, RefreshCw, Calendar, MapPin } from 'lucide-react-native';
 
 export default function PermitsScreen() {
-  const { permits, filteredPermits, filterPermits } = usePermitStore();
+  const { 
+    filteredPermits, 
+    filters, 
+    isLoading, 
+    error, 
+    lastFetch,
+    weekRanges,
+    setFilters, 
+    fetchPermits, 
+    refreshPermits,
+    getPermitStats,
+    clearError
+  } = usePermitStore();
+  
   const [searchQuery, setSearchQuery] = useState('');
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  
+  const stats = getPermitStats();
+  
+  useEffect(() => {
+    // Initial fetch when component mounts
+    if (filteredPermits.length === 0 && !isLoading) {
+      fetchPermits();
+    }
+  }, []);
   
   const stateOptions = [
     { id: 'All', label: 'All States' },
@@ -16,91 +39,186 @@ export default function PermitsScreen() {
     { id: 'Kansas', label: 'Kansas' }
   ];
   
-  const statusOptions = [
-    { id: 'All', label: 'All Status' },
-    { id: 'Filed', label: 'Filed' },
-    { id: 'Approved', label: 'Approved' },
-    { id: 'Drilling', label: 'Drilling' },
-    { id: 'Completed', label: 'Completed' }
+  const weekOptions = [
+    { id: '', label: 'All Time' },
+    ...weekRanges.map(week => ({ id: week.value, label: week.label }))
   ];
-  
-  const [selectedState, setSelectedState] = useState('All');
-  const [selectedStatus, setSelectedStatus] = useState('All');
   
   const handleSearch = (text: string) => {
     setSearchQuery(text);
-    filterPermits({
-      state: selectedState as 'Oklahoma' | 'Kansas' | 'All',
-      status: selectedStatus as 'Filed' | 'Approved' | 'Drilling' | 'Completed' | 'All',
-      formationTarget: text
-    });
+    setFilters({ operator: text });
   };
   
   const handleStateFilter = (stateId: string) => {
-    setSelectedState(stateId);
-    filterPermits({
-      state: stateId as 'Oklahoma' | 'Kansas' | 'All',
-      status: selectedStatus as 'Filed' | 'Approved' | 'Drilling' | 'Completed' | 'All',
-      formationTarget: searchQuery
+    setFilters({ state: stateId as 'Oklahoma' | 'Kansas' | 'All' });
+  };
+  
+  const handleWeekFilter = (weekId: string) => {
+    setFilters({ weekOf: weekId || undefined });
+  };
+  
+  const handleRefresh = async () => {
+    try {
+      await refreshPermits();
+    } catch (error) {
+      Alert.alert('Error', 'Failed to refresh permit data');
+    }
+  };
+  
+  const formatLastFetch = (dateString: string | null) => {
+    if (!dateString) return 'Never';
+    const date = new Date(dateString);
+    return date.toLocaleTimeString('en-US', { 
+      hour: 'numeric', 
+      minute: '2-digit',
+      hour12: true 
     });
   };
   
-  const handleStatusFilter = (statusId: string) => {
-    setSelectedStatus(statusId);
-    filterPermits({
-      state: selectedState as 'Oklahoma' | 'Kansas' | 'All',
-      status: statusId as 'Filed' | 'Approved' | 'Drilling' | 'Completed' | 'All',
-      formationTarget: searchQuery
-    });
-  };
-  
-  return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.searchContainer}>
-          <Search size={20} color={colors.textSecondary} style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search formations, counties..."
-            value={searchQuery}
-            onChangeText={handleSearch}
-            placeholderTextColor={colors.textSecondary}
-          />
-        </View>
+  const renderHeader = () => (
+    <View style={styles.headerContainer}>
+      <View style={styles.searchContainer}>
+        <Search size={20} color={colors.textSecondary} style={styles.searchIcon} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search operators, counties..."
+          value={searchQuery}
+          onChangeText={handleSearch}
+          placeholderTextColor={colors.textSecondary}
+        />
         
-        <TouchableOpacity style={styles.addButton}>
-          <Plus size={20} color="white" />
+        <TouchableOpacity 
+          style={styles.refreshButton} 
+          onPress={handleRefresh}
+          disabled={isLoading}
+        >
+          {isLoading ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <RefreshCw size={20} color={colors.primary} />
+          )}
         </TouchableOpacity>
+      </View>
+      
+      <View style={styles.statsContainer}>
+        <View style={styles.statItem}>
+          <Text style={styles.statNumber}>{stats.total}</Text>
+          <Text style={styles.statLabel}>Total Permits</Text>
+        </View>
+        <View style={styles.statItem}>
+          <Text style={styles.statNumber}>{stats.thisWeek}</Text>
+          <Text style={styles.statLabel}>This Week</Text>
+        </View>
+        <View style={styles.statItem}>
+          <Text style={styles.statNumber}>{stats.oklahoma}</Text>
+          <Text style={styles.statLabel}>Oklahoma</Text>
+        </View>
+        <View style={styles.statItem}>
+          <Text style={styles.statNumber}>{stats.kansas}</Text>
+          <Text style={styles.statLabel}>Kansas</Text>
+        </View>
       </View>
       
       <View style={styles.filtersContainer}>
         <FilterBar
           title="State"
           options={stateOptions}
-          selectedId={selectedState}
+          selectedId={filters.state || 'All'}
           onSelect={handleStateFilter}
         />
         
         <View style={styles.filterSpacer} />
         
         <FilterBar
-          title="Status"
-          options={statusOptions}
-          selectedId={selectedStatus}
-          onSelect={handleStatusFilter}
+          title="Week"
+          options={weekOptions}
+          selectedId={filters.weekOf || ''}
+          onSelect={handleWeekFilter}
         />
       </View>
       
+      {lastFetch && (
+        <View style={styles.lastFetchContainer}>
+          <Calendar size={14} color={colors.textSecondary} />
+          <Text style={styles.lastFetchText}>
+            Last updated: {formatLastFetch(lastFetch)}
+          </Text>
+        </View>
+      )}
+      
+      {error && (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity onPress={clearError} style={styles.dismissButton}>
+            <Text style={styles.dismissText}>Dismiss</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+  
+  const renderEmptyState = () => {
+    if (isLoading) {
+      return (
+        <View style={styles.emptyContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.emptyText}>Fetching real permit data...</Text>
+          <Text style={styles.emptySubtext}>
+            Loading permits from Oklahoma and Kansas
+          </Text>
+        </View>
+      );
+    }
+    
+    if (error) {
+      return (
+        <View style={styles.emptyContainer}>
+          <MapPin size={48} color={colors.textSecondary} />
+          <Text style={styles.emptyText}>Unable to load permits</Text>
+          <Text style={styles.emptySubtext}>
+            Check your connection and try refreshing
+          </Text>
+          <TouchableOpacity style={styles.retryButton} onPress={handleRefresh}>
+            <Text style={styles.retryText}>Try Again</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    
+    if (filters.weekOf) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Calendar size={48} color={colors.textSecondary} />
+          <Text style={styles.emptyText}>No permits filed this week</Text>
+          <Text style={styles.emptySubtext}>
+            Try selecting a different week or view all time
+          </Text>
+        </View>
+      );
+    }
+    
+    return (
+      <View style={styles.emptyContainer}>
+        <MapPin size={48} color={colors.textSecondary} />
+        <Text style={styles.emptyText}>No permits found</Text>
+        <Text style={styles.emptySubtext}>
+          Try adjusting your search criteria
+        </Text>
+      </View>
+    );
+  };
+  
+  return (
+    <View style={styles.container}>
       <FlatList
         data={filteredPermits}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => <PermitCard permit={item} />}
+        ListHeaderComponent={renderHeader}
+        ListEmptyComponent={renderEmptyState}
         contentContainerStyle={styles.listContent}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No permits found</Text>
-          </View>
-        }
+        refreshing={isLoading}
+        onRefresh={handleRefresh}
       />
     </View>
   );
@@ -111,22 +229,18 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  header: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+  headerContainer: {
     backgroundColor: 'white',
+    paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
   searchContainer: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.card,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    height: 40,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 16,
   },
   searchIcon: {
     marginRight: 8,
@@ -134,38 +248,114 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     height: 40,
+    backgroundColor: colors.card,
+    borderRadius: 8,
+    paddingHorizontal: 12,
     color: colors.text,
   },
-  addButton: {
+  refreshButton: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 12,
   },
+  statsContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    justifyContent: 'space-between',
+  },
+  statItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  statNumber: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
   filtersContainer: {
     flexDirection: 'row',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    paddingBottom: 12,
   },
   filterSpacer: {
     width: 12,
   },
+  lastFetchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    gap: 6,
+  },
+  lastFetchText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  errorContainer: {
+    backgroundColor: '#fee2e2',
+    marginHorizontal: 16,
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  errorText: {
+    color: '#dc2626',
+    fontSize: 14,
+    flex: 1,
+  },
+  dismissButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  dismissText: {
+    color: '#dc2626',
+    fontSize: 12,
+    fontWeight: '500',
+  },
   listContent: {
-    padding: 16,
+    flexGrow: 1,
   },
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
     padding: 40,
+    minHeight: 300,
   },
   emptyText: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  emptySubtext: {
     color: colors.textSecondary,
-    fontSize: 16,
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  retryButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginTop: 16,
+  },
+  retryText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '500',
   },
 });

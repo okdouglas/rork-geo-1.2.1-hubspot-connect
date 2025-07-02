@@ -3,15 +3,17 @@ import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, Alert } from 're
 import { Zap, AlertTriangle } from 'lucide-react-native';
 import { colors } from '@/constants/colors';
 import { useHubSpotStore } from '@/hooks/useHubSpotStore';
+import { PermitData } from '@/types/lead';
 
 interface HubSpotSyncButtonProps {
   type: 'company' | 'contact' | 'permit';
   id: string;
+  permitData?: PermitData; // For permit syncing
   style?: any;
 }
 
-const HubSpotSyncButton: React.FC<HubSpotSyncButtonProps> = ({ type, id, style }) => {
-  const { syncStatus, syncCompany, syncContact, createDealFromPermit } = useHubSpotStore();
+const HubSpotSyncButton: React.FC<HubSpotSyncButtonProps> = ({ type, id, permitData, style }) => {
+  const { syncStatus, syncCompany, syncContact, syncPermitToHubSpot } = useHubSpotStore();
   const [syncing, setSyncing] = useState(false);
 
   if (!syncStatus.isConfigured) {
@@ -31,7 +33,12 @@ const HubSpotSyncButton: React.FC<HubSpotSyncButtonProps> = ({ type, id, style }
           result = await syncContact(id);
           break;
         case 'permit':
-          result = await createDealFromPermit(id);
+          if (!permitData) {
+            Alert.alert('Error', 'Permit data is required for syncing');
+            setSyncing(false);
+            return;
+          }
+          result = await syncPermitToHubSpot(permitData);
           break;
       }
 
@@ -39,16 +46,23 @@ const HubSpotSyncButton: React.FC<HubSpotSyncButtonProps> = ({ type, id, style }
         if (result.warnings.length > 0) {
           Alert.alert(
             'Sync Complete with Notes', 
-            `Successfully synced ${type} to HubSpot. Some data was stored as notes due to field restrictions:\n\n${result.warnings.join('\n')}`,
+            `Successfully synced ${type} to HubSpot. Some information was stored as notes:
+
+${result.warnings.join('\n')}`,
             [{ text: 'OK' }]
           );
         } else {
-          Alert.alert('Success', `Successfully synced ${type} to HubSpot`);
+          const successMessage = type === 'permit' 
+            ? 'Successfully created deal and company in HubSpot'
+            : `Successfully synced ${type} to HubSpot`;
+          Alert.alert('Success', successMessage);
         }
       } else {
         Alert.alert(
           'Sync Failed', 
-          `Failed to sync ${type} to HubSpot:\n\n${result.errors.join('\n')}`,
+          `Failed to sync ${type} to HubSpot:
+
+${result.errors.join('\n')}`,
           [{ text: 'OK' }]
         );
       }
@@ -72,6 +86,23 @@ const HubSpotSyncButton: React.FC<HubSpotSyncButtonProps> = ({ type, id, style }
         return 'Sync';
     }
   };
+
+  const isValidForSync = () => {
+    if (type === 'permit' && permitData) {
+      // Check if we have enough data to create a meaningful deal
+      return permitData.operatorName && permitData.location.county;
+    }
+    return true;
+  };
+
+  if (!isValidForSync()) {
+    return (
+      <TouchableOpacity style={[styles.button, styles.disabledButton, style]} disabled>
+        <AlertTriangle size={16} color={colors.textSecondary} />
+        <Text style={[styles.buttonText, styles.disabledText]}>Insufficient Data</Text>
+      </TouchableOpacity>
+    );
+  }
 
   return (
     <TouchableOpacity 
@@ -99,10 +130,18 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     gap: 6,
   },
+  disabledButton: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
   buttonText: {
     color: 'white',
     fontSize: 12,
     fontWeight: '500',
+  },
+  disabledText: {
+    color: colors.textSecondary,
   },
 });
 
