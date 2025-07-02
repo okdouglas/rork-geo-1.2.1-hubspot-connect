@@ -34,17 +34,26 @@ export default function LeadSourcingScreen() {
     leads, 
     isLoading, 
     error, 
+    selectedState,
+    syncStatus,
+    setSelectedState,
+    searchLeadsByState,
     searchLeads, 
     clearLeads,
-    syncStatus 
+    clearError
   } = useLeadSourcingStore();
   
   const { syncStatus: hubspotStatus, syncLeadToHubSpot } = useHubSpotStore();
   
-  const [searchQuery, setSearchQuery] = useState('Oil and Gas Oklahoma Kansas');
+  const [searchQuery, setSearchQuery] = useState('');
   const [syncingLeads, setSyncingLeads] = useState<Set<string>>(new Set());
+  const [searchMode, setSearchMode] = useState<'state' | 'custom'>('state');
 
-  const handleSearch = async () => {
+  const handleStateSearch = async (state: 'Oklahoma' | 'Kansas') => {
+    await searchLeadsByState(state);
+  };
+
+  const handleCustomSearch = async () => {
     if (!searchQuery.trim()) {
       Alert.alert('Error', 'Please enter a search query');
       return;
@@ -96,30 +105,118 @@ export default function LeadSourcingScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.searchContainer}>
-          <Search size={20} color={colors.textSecondary} style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search for companies..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholderTextColor={colors.textSecondary}
-          />
-        </View>
-        
+      {/* Search Mode Toggle */}
+      <View style={styles.modeToggle}>
         <TouchableOpacity 
-          style={[styles.searchButton, isLoading && styles.disabledButton]} 
-          onPress={handleSearch}
-          disabled={isLoading}
+          style={[styles.modeButton, searchMode === 'state' && styles.activeModeButton]}
+          onPress={() => setSearchMode('state')}
         >
-          {isLoading ? (
-            <ActivityIndicator size="small" color="white" />
-          ) : (
-            <Search size={20} color="white" />
-          )}
+          <Text style={[styles.modeButtonText, searchMode === 'state' && styles.activeModeButtonText]}>
+            By State
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.modeButton, searchMode === 'custom' && styles.activeModeButton]}
+          onPress={() => setSearchMode('custom')}
+        >
+          <Text style={[styles.modeButtonText, searchMode === 'custom' && styles.activeModeButtonText]}>
+            Custom Search
+          </Text>
         </TouchableOpacity>
       </View>
+
+      {/* State Selection */}
+      {searchMode === 'state' && (
+        <View style={styles.stateSelection}>
+          <Text style={styles.sectionTitle}>Select State for Oil & Gas Companies</Text>
+          <View style={styles.stateButtons}>
+            <TouchableOpacity 
+              style={[
+                styles.stateButton, 
+                selectedState === 'Oklahoma' && styles.selectedStateButton,
+                isLoading && styles.disabledButton
+              ]}
+              onPress={() => handleStateSearch('Oklahoma')}
+              disabled={isLoading}
+            >
+              {isLoading && selectedState === 'Oklahoma' ? (
+                <ActivityIndicator size="small" color="white" />
+              ) : (
+                <>
+                  <MapPin size={20} color={selectedState === 'Oklahoma' ? 'white' : colors.primary} />
+                  <Text style={[
+                    styles.stateButtonText,
+                    selectedState === 'Oklahoma' && styles.selectedStateButtonText
+                  ]}>
+                    Oklahoma
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[
+                styles.stateButton, 
+                selectedState === 'Kansas' && styles.selectedStateButton,
+                isLoading && styles.disabledButton
+              ]}
+              onPress={() => handleStateSearch('Kansas')}
+              disabled={isLoading}
+            >
+              {isLoading && selectedState === 'Kansas' ? (
+                <ActivityIndicator size="small" color="white" />
+              ) : (
+                <>
+                  <MapPin size={20} color={selectedState === 'Kansas' ? 'white' : colors.primary} />
+                  <Text style={[
+                    styles.stateButtonText,
+                    selectedState === 'Kansas' && styles.selectedStateButtonText
+                  ]}>
+                    Kansas
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Custom Search */}
+      {searchMode === 'custom' && (
+        <View style={styles.header}>
+          <View style={styles.searchContainer}>
+            <Search size={20} color={colors.textSecondary} style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search for companies..."
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholderTextColor={colors.textSecondary}
+            />
+          </View>
+          
+          <TouchableOpacity 
+            style={[styles.searchButton, isLoading && styles.disabledButton]} 
+            onPress={handleCustomSearch}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <ActivityIndicator size="small" color="white" />
+            ) : (
+              <Search size={20} color="white" />
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Search Results Info */}
+      {syncStatus.lastSearch && (
+        <View style={styles.searchInfo}>
+          <Text style={styles.searchInfoText}>
+            Last search: {syncStatus.lastSearchState || 'Custom'} • {new Date(syncStatus.lastSearch).toLocaleDateString()}
+          </Text>
+        </View>
+      )}
 
       <View style={styles.statsContainer}>
         <View style={styles.statItem}>
@@ -176,7 +273,7 @@ export default function LeadSourcingScreen() {
         <View style={styles.errorContainer}>
           <AlertCircle size={16} color={colors.danger} />
           <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity onPress={() => useLeadSourcingStore.getState().clearError()}>
+          <TouchableOpacity onPress={clearError}>
             <Text style={styles.clearErrorText}>Dismiss</Text>
           </TouchableOpacity>
         </View>
@@ -210,7 +307,7 @@ export default function LeadSourcingScreen() {
             <Search size={48} color={colors.textSecondary} />
             <Text style={styles.emptyTitle}>Find Your Next Prospects</Text>
             <Text style={styles.emptyText}>
-              Search for Oil & Gas companies in Oklahoma and Kansas to build your prospect list
+              Select a state to search for Oil & Gas companies using real-time data from Google
             </Text>
           </View>
         )}
@@ -223,6 +320,76 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  modeToggle: {
+    flexDirection: 'row',
+    backgroundColor: 'white',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  modeButton: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginHorizontal: 4,
+    backgroundColor: colors.card,
+    alignItems: 'center',
+  },
+  activeModeButton: {
+    backgroundColor: colors.primary,
+  },
+  modeButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.text,
+  },
+  activeModeButtonText: {
+    color: 'white',
+  },
+  stateSelection: {
+    backgroundColor: 'white',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 12,
+  },
+  stateButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  stateButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: colors.primary,
+    backgroundColor: 'white',
+    gap: 8,
+  },
+  selectedStateButton: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  stateButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  selectedStateButtonText: {
+    color: 'white',
   },
   header: {
     flexDirection: 'row',
@@ -260,6 +427,18 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.6,
+  },
+  searchInfo: {
+    backgroundColor: 'rgba(26, 115, 232, 0.05)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  searchInfoText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    textAlign: 'center',
   },
   statsContainer: {
     flexDirection: 'row',

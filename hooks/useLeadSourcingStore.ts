@@ -1,17 +1,21 @@
 import { create } from 'zustand';
 import { Lead } from '@/types/lead';
-import { searchLinkedInCompanies } from '@/lib/linkedin';
+import { searchOilGasCompanies } from '@/lib/serpapi';
 
 interface LeadSourcingStore {
   leads: Lead[];
   isLoading: boolean;
   error: string | null;
+  selectedState: 'Oklahoma' | 'Kansas' | null;
   syncStatus: {
     totalFound: number;
     totalSynced: number;
     lastSearch: string | null;
+    lastSearchState: string | null;
   };
-  searchLeads: (query: string) => Promise<void>;
+  setSelectedState: (state: 'Oklahoma' | 'Kansas') => void;
+  searchLeadsByState: (state: 'Oklahoma' | 'Kansas') => Promise<void>;
+  searchLeads: (query: string) => Promise<void>; // Keep for backward compatibility
   addLead: (lead: Lead) => void;
   updateLead: (lead: Lead) => void;
   clearLeads: () => void;
@@ -23,17 +27,23 @@ export const useLeadSourcingStore = create<LeadSourcingStore>((set, get) => ({
   leads: [],
   isLoading: false,
   error: null,
+  selectedState: null,
   syncStatus: {
     totalFound: 0,
     totalSynced: 0,
     lastSearch: null,
+    lastSearchState: null,
   },
 
-  searchLeads: async (query: string) => {
-    set({ isLoading: true, error: null });
+  setSelectedState: (state) => {
+    set({ selectedState: state });
+  },
+
+  searchLeadsByState: async (state: 'Oklahoma' | 'Kansas') => {
+    set({ isLoading: true, error: null, selectedState: state });
     
     try {
-      const results = await searchLinkedInCompanies(query);
+      const results = await searchOilGasCompanies(state);
       
       set({ 
         leads: results,
@@ -42,6 +52,7 @@ export const useLeadSourcingStore = create<LeadSourcingStore>((set, get) => ({
           totalFound: results.length,
           totalSynced: results.filter(l => l.syncedToHubSpot).length,
           lastSearch: new Date().toISOString(),
+          lastSearchState: state,
         }
       });
     } catch (error) {
@@ -51,6 +62,24 @@ export const useLeadSourcingStore = create<LeadSourcingStore>((set, get) => ({
         isLoading: false 
       });
     }
+  },
+
+  // Keep backward compatibility for existing search functionality
+  searchLeads: async (query: string) => {
+    // Try to determine state from query
+    const lowerQuery = query.toLowerCase();
+    let state: 'Oklahoma' | 'Kansas';
+    
+    if (lowerQuery.includes('oklahoma')) {
+      state = 'Oklahoma';
+    } else if (lowerQuery.includes('kansas')) {
+      state = 'Kansas';
+    } else {
+      // Default to Oklahoma if no state specified
+      state = 'Oklahoma';
+    }
+    
+    await get().searchLeadsByState(state);
   },
 
   addLead: (lead) => {
@@ -74,10 +103,12 @@ export const useLeadSourcingStore = create<LeadSourcingStore>((set, get) => ({
   clearLeads: () => {
     set({ 
       leads: [],
+      selectedState: null,
       syncStatus: {
         totalFound: 0,
         totalSynced: 0,
         lastSearch: null,
+        lastSearchState: null,
       }
     });
   },

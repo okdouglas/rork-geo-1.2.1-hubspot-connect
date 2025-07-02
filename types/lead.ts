@@ -10,12 +10,19 @@ export interface Lead {
     name: string;
     title: string;
     email?: string;
+    phone?: string;
     linkedInUrl?: string;
   };
   linkedInUrl?: string;
   foundAt: string;
   syncedToHubSpot?: boolean;
   hubSpotId?: string;
+  serpApiData?: {
+    placeId?: string;
+    rating?: number;
+    reviews?: number;
+    type?: string;
+  };
 }
 
 export interface PermitData {

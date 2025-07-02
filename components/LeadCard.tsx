@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import { Globe, MapPin, Users, Phone, Star, Building } from 'lucide-react-native';
 import { Lead } from '@/types/lead';
 import { colors } from '@/constants/colors';
 
@@ -18,15 +18,9 @@ const LeadCard: React.FC<LeadCardProps> = ({ lead, onSync, syncIcon, canSync }) 
     }
   };
 
-  const handleLinkedInPress = () => {
-    if (lead.linkedInUrl) {
-      Linking.openURL(lead.linkedInUrl);
-    }
-  };
-
-  const handleContactEmail = () => {
-    if (lead.contact?.email) {
-      Linking.openURL(`mailto:${lead.contact.email}`);
+  const handlePhonePress = () => {
+    if (lead.contact?.phone) {
+      Linking.openURL(`tel:${lead.contact.phone}`);
     }
   };
 
@@ -46,14 +40,25 @@ const LeadCard: React.FC<LeadCardProps> = ({ lead, onSync, syncIcon, canSync }) 
       </View>
 
       <View style={styles.infoRow}>
-        <MaterialIcons name="location-on" size={16} color={colors.textSecondary} />
+        <MapPin size={16} color={colors.textSecondary} />
         <Text style={styles.infoText}>{lead.location}</Text>
       </View>
 
       {lead.size && (
         <View style={styles.infoRow}>
-          <MaterialIcons name="group" size={16} color={colors.textSecondary} />
+          <Users size={16} color={colors.textSecondary} />
           <Text style={styles.infoText}>{lead.size}</Text>
+        </View>
+      )}
+
+      {/* SerpAPI specific data */}
+      {lead.serpApiData?.rating && (
+        <View style={styles.infoRow}>
+          <Star size={16} color={colors.warning} />
+          <Text style={styles.infoText}>
+            {lead.serpApiData.rating} stars
+            {lead.serpApiData.reviews && ` (${lead.serpApiData.reviews} reviews)`}
+          </Text>
         </View>
       )}
 
@@ -63,14 +68,14 @@ const LeadCard: React.FC<LeadCardProps> = ({ lead, onSync, syncIcon, canSync }) 
 
       {lead.contact && (
         <View style={styles.contactContainer}>
-          <Text style={styles.contactTitle}>Key Contact:</Text>
+          <Text style={styles.contactTitle}>Contact Information:</Text>
           <View style={styles.contactInfo}>
             <Text style={styles.contactName}>{lead.contact.name}</Text>
             <Text style={styles.contactRole}>{lead.contact.title}</Text>
-            {lead.contact.email && (
-              <TouchableOpacity onPress={handleContactEmail} style={styles.contactAction}>
-                <MaterialIcons name="email" size={14} color={colors.primary} />
-                <Text style={styles.contactEmail}>{lead.contact.email}</Text>
+            {lead.contact.phone && (
+              <TouchableOpacity onPress={handlePhonePress} style={styles.contactAction}>
+                <Phone size={14} color={colors.primary} />
+                <Text style={styles.contactPhone}>{lead.contact.phone}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -81,26 +86,25 @@ const LeadCard: React.FC<LeadCardProps> = ({ lead, onSync, syncIcon, canSync }) 
         <View style={styles.linksContainer}>
           {lead.website && (
             <TouchableOpacity style={styles.linkButton} onPress={handleWebsitePress}>
-              <MaterialIcons name="public" size={14} color={colors.primary} />
+              <Globe size={14} color={colors.primary} />
               <Text style={styles.linkText}>Website</Text>
-              <MaterialIcons name="open-in-new" size={12} color={colors.primary} />
-            </TouchableOpacity>
-          )}
-          
-          {lead.linkedInUrl && (
-            <TouchableOpacity style={styles.linkButton} onPress={handleLinkedInPress}>
-              <MaterialIcons name="business" size={14} color={colors.primary} />
-              <Text style={styles.linkText}>LinkedIn</Text>
-              <MaterialIcons name="open-in-new" size={12} color={colors.primary} />
             </TouchableOpacity>
           )}
         </View>
 
-        {lead.syncedToHubSpot && (
-          <View style={styles.syncedBadge}>
-            <Text style={styles.syncedText}>Synced</Text>
-          </View>
-        )}
+        <View style={styles.badgeContainer}>
+          {lead.syncedToHubSpot && (
+            <View style={styles.syncedBadge}>
+              <Text style={styles.syncedText}>Synced</Text>
+            </View>
+          )}
+          
+          {lead.serpApiData && (
+            <View style={styles.sourceBadge}>
+              <Text style={styles.sourceText}>SerpAPI</Text>
+            </View>
+          )}
+        </View>
       </View>
     </View>
   );
@@ -184,7 +188,7 @@ const styles = StyleSheet.create({
     gap: 6,
     marginTop: 4,
   },
-  contactEmail: {
+  contactPhone: {
     fontSize: 14,
     color: colors.primary,
   },
@@ -206,6 +210,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.primary,
   },
+  badgeContainer: {
+    flexDirection: 'row',
+    gap: 8,
+  },
   syncedBadge: {
     backgroundColor: colors.success,
     paddingHorizontal: 8,
@@ -214,6 +222,17 @@ const styles = StyleSheet.create({
   },
   syncedText: {
     color: 'white',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  sourceBadge: {
+    backgroundColor: 'rgba(26, 115, 232, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  sourceText: {
+    color: colors.primary,
     fontSize: 12,
     fontWeight: '500',
   },
