@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Building, MapPin, Activity, Calendar } from 'lucide-react-native';
+import { Building, MapPin, Activity, Calendar, FileText } from 'lucide-react-native';
 import { Company } from '@/types';
 import { colors } from '@/constants/colors';
 
@@ -42,6 +42,15 @@ const CompanyCard: React.FC<CompanyCardProps> = ({ company }) => {
     router.push(`/company/${company.id}`);
   };
 
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric',
+      year: 'numeric'
+    });
+  };
+
   return (
     <TouchableOpacity style={styles.card} onPress={handlePress}>
       <View style={styles.header}>
@@ -64,10 +73,18 @@ const CompanyCard: React.FC<CompanyCardProps> = ({ company }) => {
       <View style={styles.infoRow}>
         <Calendar size={16} color={colors.textSecondary} />
         <Text style={styles.infoText}>
-          Last permit: {company.lastPermitDate.split('-').slice(1).join('/')}
-          {company.recentPermitsCount > 0 && ` • ${company.recentPermitsCount} recent`}
+          Last permit: {formatDate(company.lastPermitDate)}
         </Text>
       </View>
+      
+      {company.recentPermitsCount > 0 && (
+        <View style={styles.infoRow}>
+          <FileText size={16} color={colors.primary} />
+          <Text style={[styles.infoText, { color: colors.primary, fontWeight: '500' }]}>
+            {company.recentPermitsCount} recent permits
+          </Text>
+        </View>
+      )}
       
       <View style={styles.footer}>
         <Text style={styles.formationText}>{company.primaryFormation}</Text>

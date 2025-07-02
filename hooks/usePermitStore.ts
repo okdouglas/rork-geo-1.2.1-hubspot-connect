@@ -11,6 +11,7 @@ interface PermitFilters {
     end: string;
   };
   weekOf?: string;
+  monthOf?: string;
 }
 
 type PermitStore = {
@@ -22,6 +23,7 @@ type PermitStore = {
   error: string | null;
   lastFetch: string | null;
   weekRanges: Array<{ label: string; value: string }>;
+  monthRanges: Array<{ label: string; value: string }>;
   
   // Actions
   setSelectedPermit: (permit: PermitData | null) => void;
@@ -29,6 +31,7 @@ type PermitStore = {
   fetchPermits: () => Promise<void>;
   refreshPermits: () => Promise<void>;
   getPermitsByOperator: (operatorName: string) => PermitData[];
+  getPermitsByCompany: (companyName: string) => PermitData[];
   getPermitStats: () => { 
     oklahoma: number; 
     kansas: number; 
@@ -37,7 +40,7 @@ type PermitStore = {
     thisMonth: number;
   };
   clearError: () => void;
-  initializeWeekRanges: () => void;
+  initializeRanges: () => void;
 };
 
 export const usePermitStore = create<PermitStore>((set, get) => ({
@@ -55,9 +58,12 @@ export const usePermitStore = create<PermitStore>((set, get) => ({
   error: null,
   lastFetch: null,
   weekRanges: [],
+  monthRanges: [],
   
-  initializeWeekRanges: () => {
-    set({ weekRanges: getWeekRanges(6) });
+  initializeRanges: () => {
+    const weekRanges = getWeekRanges(6);
+    const monthRanges = getMonthRanges(6);
+    set({ weekRanges, monthRanges });
   },
   
   setSelectedPermit: (permit) => set({ selectedPermit: permit }),
@@ -82,7 +88,8 @@ export const usePermitStore = create<PermitStore>((set, get) => ({
         operator: filters.operator,
         county: filters.county,
         dateRange: filters.dateRange,
-        weekOf: filters.weekOf
+        weekOf: filters.weekOf,
+        monthOf: filters.monthOf
       };
       
       const permits = await fetchPermitData(searchParams);
@@ -116,6 +123,12 @@ export const usePermitStore = create<PermitStore>((set, get) => ({
     );
   },
   
+  getPermitsByCompany: (companyName) => {
+    return get().permits.filter(permit => 
+      permit.operatorName.toLowerCase().includes(companyName.toLowerCase())
+    );
+  },
+  
   getPermitStats: () => {
     const allPermits = get().permits;
     const now = new Date();
@@ -127,12 +140,12 @@ export const usePermitStore = create<PermitStore>((set, get) => ({
     
     const thisWeek = allPermits.filter(p => {
       const permitDate = new Date(p.filingDate);
-      return permitDate >= oneWeekAgo;
+      return permitDate >= oneWeekAgo && permitDate <= now;
     }).length;
     
     const thisMonth = allPermits.filter(p => {
       const permitDate = new Date(p.filingDate);
-      return permitDate >= oneMonthAgo;
+      return permitDate >= oneMonthAgo && permitDate <= now;
     }).length;
     
     return {
@@ -146,3 +159,20 @@ export const usePermitStore = create<PermitStore>((set, get) => ({
   
   clearError: () => set({ error: null }),
 }));
+
+function getMonthRanges(monthsBack: number = 6): Array<{ label: string; value: string }> {
+  const months: Array<{ label: string; value: string }> = [];
+  const now = new Date();
+  
+  for (let i = 0; i < monthsBack; i++) {
+    const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
+    
+    months.push({
+      label: monthStart.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+      value: monthStart.toISOString().split('T')[0]
+    });
+  }
+  
+  return months;
+}

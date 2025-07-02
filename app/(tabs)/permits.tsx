@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { usePermitStore } from '@/hooks/usePermitStore';
+import { useCompanyStore } from '@/hooks/useCompanyStore';
 import { colors } from '@/constants/colors';
 import PermitCard from '@/components/PermitCard';
 import FilterBar from '@/components/FilterBar';
@@ -14,24 +15,38 @@ export default function PermitsScreen() {
     error, 
     lastFetch,
     weekRanges,
+    monthRanges,
     setFilters, 
     fetchPermits, 
     refreshPermits,
     getPermitStats,
-    clearError
+    clearError,
+    initializeRanges
   } = usePermitStore();
   
+  const { addCompaniesFromPermits } = useCompanyStore();
+  
   const [searchQuery, setSearchQuery] = useState('');
-  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [viewMode, setViewMode] = useState<'week' | 'month'>('week');
   
   const stats = getPermitStats();
   
   useEffect(() => {
+    // Initialize ranges when component mounts
+    initializeRanges();
+    
     // Initial fetch when component mounts
     if (filteredPermits.length === 0 && !isLoading) {
       fetchPermits();
     }
   }, []);
+  
+  useEffect(() => {
+    // Add companies from permits when permits are loaded
+    if (filteredPermits.length > 0) {
+      addCompaniesFromPermits(filteredPermits);
+    }
+  }, [filteredPermits]);
   
   const stateOptions = [
     { id: 'All', label: 'All States' },
@@ -44,6 +59,11 @@ export default function PermitsScreen() {
     ...weekRanges.map(week => ({ id: week.value, label: week.label }))
   ];
   
+  const monthOptions = [
+    { id: '', label: 'All Time' },
+    ...monthRanges.map(month => ({ id: month.value, label: month.label }))
+  ];
+  
   const handleSearch = (text: string) => {
     setSearchQuery(text);
     setFilters({ operator: text });
@@ -54,7 +74,17 @@ export default function PermitsScreen() {
   };
   
   const handleWeekFilter = (weekId: string) => {
-    setFilters({ weekOf: weekId || undefined });
+    setFilters({ weekOf: weekId || undefined, monthOf: undefined });
+  };
+  
+  const handleMonthFilter = (monthId: string) => {
+    setFilters({ monthOf: monthId || undefined, weekOf: undefined });
+  };
+  
+  const handleViewModeChange = (mode: 'week' | 'month') => {
+    setViewMode(mode);
+    // Clear existing time filters when switching modes
+    setFilters({ weekOf: undefined, monthOf: undefined });
   };
   
   const handleRefresh = async () => {
@@ -110,6 +140,10 @@ export default function PermitsScreen() {
           <Text style={styles.statLabel}>This Week</Text>
         </View>
         <View style={styles.statItem}>
+          <Text style={styles.statNumber}>{stats.thisMonth}</Text>
+          <Text style={styles.statLabel}>This Month</Text>
+        </View>
+        <View style={styles.statItem}>
           <Text style={styles.statNumber}>{stats.oklahoma}</Text>
           <Text style={styles.statLabel}>Oklahoma</Text>
         </View>
@@ -129,12 +163,42 @@ export default function PermitsScreen() {
         
         <View style={styles.filterSpacer} />
         
-        <FilterBar
-          title="Week"
-          options={weekOptions}
-          selectedId={filters.weekOf || ''}
-          onSelect={handleWeekFilter}
-        />
+        <View style={styles.viewModeContainer}>
+          <TouchableOpacity
+            style={[styles.viewModeButton, viewMode === 'week' && styles.viewModeButtonActive]}
+            onPress={() => handleViewModeChange('week')}
+          >
+            <Text style={[styles.viewModeText, viewMode === 'week' && styles.viewModeTextActive]}>
+              Weekly
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.viewModeButton, viewMode === 'month' && styles.viewModeButtonActive]}
+            onPress={() => handleViewModeChange('month')}
+          >
+            <Text style={[styles.viewModeText, viewMode === 'month' && styles.viewModeTextActive]}>
+              Monthly
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+      
+      <View style={styles.timeFilterContainer}>
+        {viewMode === 'week' ? (
+          <FilterBar
+            title="Week"
+            options={weekOptions}
+            selectedId={filters.weekOf || ''}
+            onSelect={handleWeekFilter}
+          />
+        ) : (
+          <FilterBar
+            title="Month"
+            options={monthOptions}
+            selectedId={filters.monthOf || ''}
+            onSelect={handleMonthFilter}
+          />
+        )}
       </View>
       
       {lastFetch && (
@@ -185,13 +249,14 @@ export default function PermitsScreen() {
       );
     }
     
-    if (filters.weekOf) {
+    if (filters.weekOf || filters.monthOf) {
+      const timeFrame = filters.weekOf ? 'week' : 'month';
       return (
         <View style={styles.emptyContainer}>
           <Calendar size={48} color={colors.textSecondary} />
-          <Text style={styles.emptyText}>No permits filed this week</Text>
+          <Text style={styles.emptyText}>No permits filed this {timeFrame}</Text>
           <Text style={styles.emptySubtext}>
-            Try selecting a different week or view all time
+            Try selecting a different {timeFrame} or view all time
           </Text>
         </View>
       );
@@ -271,22 +336,51 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   statNumber: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '700',
     color: colors.primary,
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: colors.textSecondary,
     marginTop: 2,
+    textAlign: 'center',
   },
   filtersContainer: {
     flexDirection: 'row',
     paddingHorizontal: 16,
     paddingBottom: 12,
+    alignItems: 'center',
   },
   filterSpacer: {
     width: 12,
+  },
+  viewModeContainer: {
+    flexDirection: 'row',
+    backgroundColor: colors.card,
+    borderRadius: 8,
+    padding: 2,
+    marginLeft: 'auto',
+  },
+  viewModeButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  viewModeButtonActive: {
+    backgroundColor: colors.primary,
+  },
+  viewModeText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  viewModeTextActive: {
+    color: 'white',
+  },
+  timeFilterContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
   },
   lastFetchContainer: {
     flexDirection: 'row',

@@ -10,6 +10,7 @@ interface PermitSearchParams {
     end: string;
   };
   weekOf?: string;
+  monthOf?: string;
 }
 
 // Cache for permit data
@@ -59,6 +60,17 @@ export async function fetchPermitData(params: PermitSearchParams): Promise<Permi
       permits = permits.filter(permit => {
         const permitDate = new Date(permit.filingDate);
         return permitDate >= weekStart && permitDate < weekEnd;
+      });
+    }
+    
+    // Filter by month if specified
+    if (params.monthOf) {
+      const monthStart = new Date(params.monthOf);
+      const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
+      
+      permits = permits.filter(permit => {
+        const permitDate = new Date(permit.filingDate);
+        return permitDate >= monthStart && permitDate <= monthEnd;
       });
     }
     
@@ -391,4 +403,20 @@ export function getWeekRanges(monthsBack: number = 6): Array<{ label: string; va
   }
   
   return weeks;
+}
+
+export function getMonthRanges(monthsBack: number = 6): Array<{ label: string; value: string }> {
+  const months: Array<{ label: string; value: string }> = [];
+  const now = new Date();
+  
+  for (let i = 0; i < monthsBack; i++) {
+    const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    
+    months.push({
+      label: monthStart.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+      value: monthStart.toISOString().split('T')[0]
+    });
+  }
+  
+  return months;
 }

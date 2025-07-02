@@ -1,14 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity } from 'react-native';
 import { useCompanyStore } from '@/hooks/useCompanyStore';
+import { usePermitStore } from '@/hooks/usePermitStore';
 import { colors } from '@/constants/colors';
 import CompanyCard from '@/components/CompanyCard';
 import FilterBar from '@/components/FilterBar';
-import { Search, Plus } from 'lucide-react-native';
+import { Search, Plus, RefreshCw } from 'lucide-react-native';
 
 export default function CompaniesScreen() {
-  const { companies, filteredCompanies, filterCompanies } = useCompanyStore();
+  const { companies, filteredCompanies, filterCompanies, addCompaniesFromPermits } = useCompanyStore();
+  const { permits, fetchPermits } = usePermitStore();
   const [searchQuery, setSearchQuery] = useState('');
+  const [isRefreshing, setIsRefreshing] = useState(false);
   
   const stateOptions = [
     { id: 'All', label: 'All States' },
@@ -26,6 +29,13 @@ export default function CompaniesScreen() {
   
   const [selectedState, setSelectedState] = useState('All');
   const [selectedStatus, setSelectedStatus] = useState('All');
+  
+  useEffect(() => {
+    // Sync companies from permits when permits are available
+    if (permits.length > 0) {
+      addCompaniesFromPermits(permits);
+    }
+  }, [permits]);
   
   const handleSearch = (text: string) => {
     setSearchQuery(text);
@@ -54,6 +64,29 @@ export default function CompaniesScreen() {
     });
   };
   
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      // Fetch latest permits to update companies
+      await fetchPermits();
+    } catch (error) {
+      console.error('Failed to refresh companies:', error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+  
+  const renderHeader = () => (
+    <View style={styles.headerInfo}>
+      <Text style={styles.headerText}>
+        {filteredCompanies.length} companies found
+      </Text>
+      <Text style={styles.headerSubtext}>
+        Including companies from recent permit filings
+      </Text>
+    </View>
+  );
+  
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -67,6 +100,14 @@ export default function CompaniesScreen() {
             placeholderTextColor={colors.textSecondary}
           />
         </View>
+        
+        <TouchableOpacity 
+          style={styles.refreshButton}
+          onPress={handleRefresh}
+          disabled={isRefreshing}
+        >
+          <RefreshCw size={20} color={colors.primary} />
+        </TouchableOpacity>
         
         <TouchableOpacity style={styles.addButton}>
           <Plus size={20} color="white" />
@@ -96,11 +137,17 @@ export default function CompaniesScreen() {
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => <CompanyCard company={item} />}
         contentContainerStyle={styles.listContent}
+        ListHeaderComponent={renderHeader}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>No companies found</Text>
+            <Text style={styles.emptySubtext}>
+              Companies will appear here as permits are loaded
+            </Text>
           </View>
         }
+        refreshing={isRefreshing}
+        onRefresh={handleRefresh}
       />
     </View>
   );
@@ -136,6 +183,13 @@ const styles = StyleSheet.create({
     height: 40,
     color: colors.text,
   },
+  refreshButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+  },
   addButton: {
     width: 40,
     height: 40,
@@ -143,7 +197,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 12,
+    marginLeft: 8,
   },
   filtersContainer: {
     flexDirection: 'row',
@@ -156,6 +210,22 @@ const styles = StyleSheet.create({
   filterSpacer: {
     width: 12,
   },
+  headerInfo: {
+    padding: 16,
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  headerText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  headerSubtext: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: 4,
+  },
   listContent: {
     padding: 16,
   },
@@ -167,5 +237,12 @@ const styles = StyleSheet.create({
   emptyText: {
     color: colors.textSecondary,
     fontSize: 16,
+    fontWeight: '500',
+  },
+  emptySubtext: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: 'center',
   },
 });

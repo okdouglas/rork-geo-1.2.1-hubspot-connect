@@ -10,6 +10,12 @@ export interface Company {
   currentSoftwareStack: string[];
   state: 'Oklahoma' | 'Kansas' | 'Both';
   status: 'Active' | 'Dormant' | 'Reactivated';
+  permitData?: {
+    totalPermits: number;
+    recentPermits: number;
+    formations: string[];
+    counties: string[];
+  };
 }
 
 export interface Contact {
