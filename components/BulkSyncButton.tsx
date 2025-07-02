@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
-import { Upload, CheckCircle, AlertTriangle, Zap } from 'lucide-react-native';
+import { Upload, CheckCircle, AlertTriangle, Info } from 'lucide-react-native';
 import { colors } from '@/constants/colors';
 import { useHubSpotStore } from '@/hooks/useHubSpotStore';
 import { Lead } from '@/types/lead';
 
 interface BulkSyncButtonProps {
   leads: Lead[];
-  onSyncComplete?: (results: { successful: number; failed: number; total: number }) => void;
+  onSyncComplete?: (results: { successful: number; failed: number; warnings: number; total: number }) => void;
   disabled?: boolean;
 }
 
@@ -15,6 +15,14 @@ interface SyncProgress {
   current: number;
   total: number;
   currentLead: string;
+}
+
+interface SyncResults {
+  successful: number;
+  failed: number;
+  warnings: number;
+  total: number;
+  details: string[];
 }
 
 const BulkSyncButton: React.FC<BulkSyncButtonProps> = ({ 
@@ -25,6 +33,7 @@ const BulkSyncButton: React.FC<BulkSyncButtonProps> = ({
   const { syncLeadToHubSpot, syncStatus } = useHubSpotStore();
   const [syncing, setSyncing] = useState(false);
   const [progress, setProgress] = useState<SyncProgress | null>(null);
+  const [results, setResults] = useState<SyncResults | null>(null);
 
   const handleBulkSync = async () => {
     if (leads.length === 0) {
@@ -33,8 +42,8 @@ const BulkSyncButton: React.FC<BulkSyncButtonProps> = ({
     }
 
     Alert.alert(
-      'Sync to HubSpot',
-      `This will export ${leads.length} leads to HubSpot as Companies and Contacts. This may take a few minutes. Continue?`,
+      'Export to HubSpot',
+      `This will export ${leads.length} leads to HubSpot as Companies and Contacts. Some data may be stored as notes if field restrictions apply. Continue?`,
       [
         { text: 'Cancel', style: 'cancel' },
         { 
@@ -48,8 +57,12 @@ const BulkSyncButton: React.FC<BulkSyncButtonProps> = ({
 
   const performBulkSync = async () => {
     setSyncing(true);
+    setResults(null);
+    
     let successful = 0;
     let failed = 0;
+    let warnings = 0;
+    const details: string[] = [];
 
     try {
       for (let i = 0; i < leads.length; i++) {
@@ -62,15 +75,25 @@ const BulkSyncButton: React.FC<BulkSyncButtonProps> = ({
         });
 
         try {
-          const success = await syncLeadToHubSpot(lead.id);
-          if (success) {
+          const result = await syncLeadToHubSpot(lead.id);
+          
+          if (result.success) {
             successful++;
+            if (result.warnings.length > 0) {
+              warnings++;
+              details.push(`${lead.companyName}: Synced with warnings - ${result.warnings.join(', ')}`);
+            } else {
+              details.push(`${lead.companyName}: Successfully synced`);
+            }
           } else {
             failed++;
+            details.push(`${lead.companyName}: Failed - ${result.errors.join(', ')}`);
           }
         } catch (error) {
           console.error(`Failed to sync lead ${lead.id}:`, error);
           failed++;
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+          details.push(`${lead.companyName}: Failed - ${errorMessage}`);
         }
 
         // Add a small delay to avoid rate limiting
@@ -79,14 +102,42 @@ const BulkSyncButton: React.FC<BulkSyncButtonProps> = ({
         }
       }
 
-      onSyncComplete?.({ successful, failed, total: leads.length });
+      const finalResults = { successful, failed, warnings, total: leads.length, details };
+      setResults(finalResults);
+      onSyncComplete?.(finalResults);
+
+      // Show summary alert
+      if (failed === 0 && warnings === 0) {
+        Alert.alert('Export Complete', `Successfully exported all ${successful} leads to HubSpot!`);
+      } else if (failed === 0) {
+        Alert.alert(
+          'Export Complete with Warnings', 
+          `Exported ${successful} leads. ${warnings} had some data stored as notes due to field restrictions.`
+        );
+      } else {
+        Alert.alert(
+          'Export Complete', 
+          `Exported ${successful} leads successfully. ${failed} failed. ${warnings} had warnings.`
+        );
+      }
+
     } catch (error) {
       console.error('Bulk sync error:', error);
-      Alert.alert('Sync Error', 'An error occurred during bulk sync. Some leads may have been synced successfully.');
+      Alert.alert('Export Error', 'An error occurred during bulk export. Some leads may have been exported successfully.');
     } finally {
       setSyncing(false);
       setProgress(null);
     }
+  };
+
+  const showResults = () => {
+    if (!results) return;
+
+    Alert.alert(
+      'Export Results',
+      `Successful: ${results.successful}\nFailed: ${results.failed}\nWith Warnings: ${results.warnings}\n\nDetails:\n${results.details.slice(0, 10).join('\n')}${results.details.length > 10 ? '\n...' : ''}`,
+      [{ text: 'OK' }]
+    );
   };
 
   if (syncing) {
@@ -111,10 +162,47 @@ const BulkSyncButton: React.FC<BulkSyncButtonProps> = ({
               {progress.current} of {progress.total} leads
             </Text>
             <Text style={styles.currentLeadText}>
-              Syncing: {progress.currentLead}
+              Exporting: {progress.currentLead}
             </Text>
           </View>
         )}
+      </View>
+    );
+  }
+
+  if (results) {
+    return (
+      <View style={styles.resultsContainer}>
+        <View style={styles.resultsHeader}>
+          <CheckCircle size={20} color={colors.success} />
+          <Text style={styles.resultsTitle}>Export Complete</Text>
+        </View>
+        
+        <View style={styles.resultsStats}>
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>{results.successful}</Text>
+            <Text style={styles.statLabel}>Successful</Text>
+          </View>
+          
+          {results.warnings > 0 && (
+            <View style={styles.statItem}>
+              <Text style={[styles.statNumber, { color: colors.warning }]}>{results.warnings}</Text>
+              <Text style={styles.statLabel}>With Notes</Text>
+            </View>
+          )}
+          
+          {results.failed > 0 && (
+            <View style={styles.statItem}>
+              <Text style={[styles.statNumber, { color: colors.error }]}>{results.failed}</Text>
+              <Text style={styles.statLabel}>Failed</Text>
+            </View>
+          )}
+        </View>
+
+        <TouchableOpacity style={styles.detailsButton} onPress={showResults}>
+          <Info size={16} color={colors.primary} />
+          <Text style={styles.detailsButtonText}>View Details</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -215,6 +303,54 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
     textAlign: 'center',
+  },
+  resultsContainer: {
+    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.success,
+  },
+  resultsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  resultsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.success,
+  },
+  resultsStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 12,
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  statNumber: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.success,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  detailsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+  },
+  detailsButtonText: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '500',
   },
 });
 

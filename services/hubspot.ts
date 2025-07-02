@@ -47,6 +47,13 @@ interface HubSpotDeal {
   permit_location?: string;
 }
 
+interface SyncResult {
+  success: boolean;
+  id?: string;
+  failedFields: { [key: string]: any };
+  errors: string[];
+}
+
 class HubSpotService {
   private config: HubSpotConfig | null = null;
   private baseUrl = 'https://api.hubapi.com';
@@ -86,23 +93,220 @@ class HubSpotService {
     }
   }
 
-  // Helper method to create safe properties object with only standard HubSpot properties
+  // Enhanced method to try syncing fields individually and collect failures
+  private async syncWithFallback(
+    endpoint: string, 
+    method: 'POST' | 'PATCH',
+    allProperties: { [key: string]: any },
+    coreFields: string[]
+  ): Promise<SyncResult> {
+    const failedFields: { [key: string]: any } = {};
+    const errors: string[] = [];
+    let recordId: string | undefined;
+
+    // First, try with core fields only
+    const coreProperties: { [key: string]: any } = {};
+    coreFields.forEach(field => {
+      if (allProperties[field] !== undefined) {
+        coreProperties[field] = allProperties[field];
+      }
+    });
+
+    try {
+      const result = await this.makeRequest(endpoint, method, { properties: coreProperties });
+      recordId = result.id;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      errors.push(`Core fields failed: ${errorMessage}`);
+      
+      // If core fields fail, try with just the most essential field
+      const essentialField = coreFields[0];
+      if (allProperties[essentialField]) {
+        try {
+          const result = await this.makeRequest(endpoint, method, { 
+            properties: { [essentialField]: allProperties[essentialField] } 
+          });
+          recordId = result.id;
+          
+          // Mark all other core fields as failed
+          coreFields.slice(1).forEach(field => {
+            if (allProperties[field] !== undefined) {
+              failedFields[field] = allProperties[field];
+            }
+          });
+        } catch (essentialError) {
+          const essentialErrorMessage = essentialError instanceof Error ? essentialError.message : 'Unknown error occurred';
+          errors.push(`Essential field failed: ${essentialErrorMessage}`);
+          return { success: false, failedFields: allProperties, errors };
+        }
+      } else {
+        return { success: false, failedFields: allProperties, errors };
+      }
+    }
+
+    // Now try to update with additional fields one by one
+    const remainingFields = Object.keys(allProperties).filter(field => !coreFields.includes(field));
+    
+    for (const field of remainingFields) {
+      if (allProperties[field] !== undefined && recordId) {
+        try {
+          await this.makeRequest(`${endpoint}/${recordId}`, 'PATCH', {
+            properties: { [field]: allProperties[field] }
+          });
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+          failedFields[field] = allProperties[field];
+          errors.push(`Field '${field}' failed: ${errorMessage}`);
+        }
+      }
+    }
+
+    return {
+      success: true,
+      id: recordId,
+      failedFields,
+      errors
+    };
+  }
+
+  // Helper method to create comprehensive notes from failed fields
+  private createFailedFieldsNote(failedFields: { [key: string]: any }, recordType: string): string {
+    if (Object.keys(failedFields).length === 0) return '';
+
+    const noteLines = [`Additional ${recordType} Data (Auto-synced):`];
+    
+    Object.entries(failedFields).forEach(([key, value]) => {
+      const formattedKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+      noteLines.push(`• ${formattedKey}: ${value}`);
+    });
+
+    noteLines.push('');
+    noteLines.push(`Synced on: ${new Date().toLocaleDateString()}`);
+    
+    return noteLines.join('\n');
+  }
+
+  // Enhanced company creation with fallback
+  async createCompanyWithFallback(companyData: HubSpotCompany): Promise<SyncResult> {
+    const coreFields = ['name', 'industry', 'state'];
+    const allProperties = this.createSafeCompanyProperties(companyData);
+    
+    const result = await this.syncWithFallback(
+      '/crm/v3/objects/companies',
+      'POST',
+      allProperties,
+      coreFields
+    );
+
+    // If there are failed fields, create a note
+    if (result.success && result.id && Object.keys(result.failedFields).length > 0) {
+      try {
+        const noteContent = this.createFailedFieldsNote(result.failedFields, 'Company');
+        await this.createNote(noteContent, 'company', result.id);
+      } catch (noteError) {
+        const noteErrorMessage = noteError instanceof Error ? noteError.message : 'Unknown error occurred';
+        result.errors.push(`Failed to create note: ${noteErrorMessage}`);
+      }
+    }
+
+    return result;
+  }
+
+  // Enhanced contact creation with fallback
+  async createContactWithFallback(contactData: HubSpotContact): Promise<SyncResult> {
+    const coreFields = ['email', 'firstname', 'lastname'];
+    const allProperties = this.createSafeContactProperties(contactData);
+    
+    const result = await this.syncWithFallback(
+      '/crm/v3/objects/contacts',
+      'POST',
+      allProperties,
+      coreFields
+    );
+
+    // If there are failed fields, create a note
+    if (result.success && result.id && Object.keys(result.failedFields).length > 0) {
+      try {
+        const noteContent = this.createFailedFieldsNote(result.failedFields, 'Contact');
+        await this.createNote(noteContent, 'contact', result.id);
+      } catch (noteError) {
+        const noteErrorMessage = noteError instanceof Error ? noteError.message : 'Unknown error occurred';
+        result.errors.push(`Failed to create note: ${noteErrorMessage}`);
+      }
+    }
+
+    return result;
+  }
+
+  // Enhanced update methods
+  async updateCompanyWithFallback(hubspotId: string, companyData: Partial<HubSpotCompany>): Promise<SyncResult> {
+    const coreFields = ['name'];
+    const allProperties = this.createSafeCompanyProperties(companyData as HubSpotCompany);
+    
+    const result = await this.syncWithFallback(
+      `/crm/v3/objects/companies`,
+      'PATCH',
+      allProperties,
+      coreFields
+    );
+
+    result.id = hubspotId; // For updates, we already know the ID
+
+    // If there are failed fields, create a note
+    if (result.success && Object.keys(result.failedFields).length > 0) {
+      try {
+        const noteContent = this.createFailedFieldsNote(result.failedFields, 'Company Update');
+        await this.createNote(noteContent, 'company', hubspotId);
+      } catch (noteError) {
+        const noteErrorMessage = noteError instanceof Error ? noteError.message : 'Unknown error occurred';
+        result.errors.push(`Failed to create note: ${noteErrorMessage}`);
+      }
+    }
+
+    return result;
+  }
+
+  async updateContactWithFallback(hubspotId: string, contactData: Partial<HubSpotContact>): Promise<SyncResult> {
+    const coreFields = ['email'];
+    const allProperties = this.createSafeContactProperties(contactData as HubSpotContact);
+    
+    const result = await this.syncWithFallback(
+      `/crm/v3/objects/contacts`,
+      'PATCH',
+      allProperties,
+      coreFields
+    );
+
+    result.id = hubspotId; // For updates, we already know the ID
+
+    // If there are failed fields, create a note
+    if (result.success && Object.keys(result.failedFields).length > 0) {
+      try {
+        const noteContent = this.createFailedFieldsNote(result.failedFields, 'Contact Update');
+        await this.createNote(noteContent, 'contact', hubspotId);
+      } catch (noteError) {
+        const noteErrorMessage = noteError instanceof Error ? noteError.message : 'Unknown error occurred';
+        result.errors.push(`Failed to create note: ${noteErrorMessage}`);
+      }
+    }
+
+    return result;
+  }
+
+  // Keep original methods for backward compatibility
   private createSafeCompanyProperties(companyData: HubSpotCompany) {
-    // Standard HubSpot company properties that always exist
     const standardProperties: any = {
       name: companyData.name,
       industry: companyData.industry,
       state: companyData.state,
     };
 
-    // Optional standard properties
     if (companyData.domain) standardProperties.domain = companyData.domain;
     if (companyData.numberofemployees) standardProperties.numberofemployees = companyData.numberofemployees;
     if (companyData.city) standardProperties.city = companyData.city;
     if (companyData.phone) standardProperties.phone = companyData.phone;
     if (companyData.website) standardProperties.website = companyData.website;
 
-    // Create description with custom data
     const customData = [];
     if (companyData.primary_formation) customData.push(`Primary Formation: ${companyData.primary_formation}`);
     if (companyData.drilling_activity_level) customData.push(`Drilling Activity: ${companyData.drilling_activity_level}`);
@@ -123,9 +327,7 @@ class HubSpotService {
     return standardProperties;
   }
 
-  // Helper method to create safe contact properties
   private createSafeContactProperties(contactData: HubSpotContact) {
-    // Standard HubSpot contact properties
     const standardProperties: any = {
       email: contactData.email,
       firstname: contactData.firstname,
@@ -134,11 +336,9 @@ class HubSpotService {
       company: contactData.company,
     };
 
-    // Optional standard properties
     if (contactData.phone) standardProperties.phone = contactData.phone;
     if (contactData.hs_lead_status) standardProperties.hs_lead_status = contactData.hs_lead_status;
 
-    // Create notes with custom data
     const customData = [];
     if (contactData.geological_expertise) customData.push(`Expertise: ${contactData.geological_expertise}`);
     if (contactData.years_experience) customData.push(`Experience: ${contactData.years_experience} years`);
@@ -146,24 +346,43 @@ class HubSpotService {
     if (contactData.last_contact_date) customData.push(`Last Contact: ${contactData.last_contact_date}`);
 
     if (customData.length > 0) {
-      // Store custom data in notes field or description if available
       standardProperties.notes_last_contacted = customData.join('; ');
     }
 
     return standardProperties;
   }
 
-  // Company Methods
+  // Original methods - now use fallback versions internally
   async createCompany(companyData: HubSpotCompany) {
-    const properties = this.createSafeCompanyProperties(companyData);
-    return this.makeRequest('/crm/v3/objects/companies', 'POST', { properties });
+    const result = await this.createCompanyWithFallback(companyData);
+    if (!result.success) {
+      throw new Error(result.errors.join('; '));
+    }
+    return { id: result.id };
   }
 
   async updateCompany(hubspotId: string, companyData: Partial<HubSpotCompany>) {
-    const properties = this.createSafeCompanyProperties(companyData as HubSpotCompany);
-    return this.makeRequest(`/crm/v3/objects/companies/${hubspotId}`, 'PATCH', {
-      properties
-    });
+    const result = await this.updateCompanyWithFallback(hubspotId, companyData);
+    if (!result.success) {
+      throw new Error(result.errors.join('; '));
+    }
+    return { id: result.id };
+  }
+
+  async createContact(contactData: HubSpotContact) {
+    const result = await this.createContactWithFallback(contactData);
+    if (!result.success) {
+      throw new Error(result.errors.join('; '));
+    }
+    return { id: result.id };
+  }
+
+  async updateContact(hubspotId: string, contactData: Partial<HubSpotContact>) {
+    const result = await this.updateContactWithFallback(hubspotId, contactData);
+    if (!result.success) {
+      throw new Error(result.errors.join('; '));
+    }
+    return { id: result.id };
   }
 
   async searchCompanyByName(name: string) {
@@ -178,19 +397,6 @@ class HubSpotService {
     };
 
     return this.makeRequest('/crm/v3/objects/companies/search', 'POST', searchData);
-  }
-
-  // Contact Methods
-  async createContact(contactData: HubSpotContact) {
-    const properties = this.createSafeContactProperties(contactData);
-    return this.makeRequest('/crm/v3/objects/contacts', 'POST', { properties });
-  }
-
-  async updateContact(hubspotId: string, contactData: Partial<HubSpotContact>) {
-    const properties = this.createSafeContactProperties(contactData as HubSpotContact);
-    return this.makeRequest(`/crm/v3/objects/contacts/${hubspotId}`, 'PATCH', {
-      properties
-    });
   }
 
   async searchContactByEmail(email: string) {
@@ -209,18 +415,15 @@ class HubSpotService {
 
   // Deal Methods
   async createDeal(dealData: HubSpotDeal) {
-    // Only use standard deal properties
     const properties: any = {
       dealname: dealData.dealname,
       dealstage: dealData.dealstage,
       pipeline: dealData.pipeline,
     };
 
-    // Optional standard properties
     if (dealData.amount) properties.amount = dealData.amount;
     if (dealData.closedate) properties.closedate = dealData.closedate;
 
-    // Put custom data in description
     const customData = [];
     if (dealData.deal_type) customData.push(`Type: ${dealData.deal_type}`);
     if (dealData.formation_target) customData.push(`Formation: ${dealData.formation_target}`);
@@ -302,4 +505,4 @@ class HubSpotService {
 }
 
 export const hubspotService = new HubSpotService();
-export type { HubSpotConfig, HubSpotContact, HubSpotCompany, HubSpotDeal };
+export type { HubSpotConfig, HubSpotContact, HubSpotCompany, HubSpotDeal, SyncResult };
