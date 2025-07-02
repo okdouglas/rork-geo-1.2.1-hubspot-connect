@@ -5,11 +5,6 @@ interface PermitSearchParams {
   state?: 'Oklahoma' | 'Kansas';
   operator?: string;
   county?: string;
-  dateRange?: {
-    start: string;
-    end: string;
-  };
-  weekOf?: string;
   monthOf?: string;
 }
 
@@ -39,29 +34,14 @@ export async function fetchPermitData(params: PermitSearchParams): Promise<Permi
       permits = permits.concat(kansasPermits);
     }
     
-    // Filter by date range (past 6 months by default)
+    // Filter by past 6 months only
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
     
-    const startDate = params.dateRange?.start ? new Date(params.dateRange.start) : sixMonthsAgo;
-    const endDate = params.dateRange?.end ? new Date(params.dateRange.end) : new Date();
-    
     permits = permits.filter(permit => {
       const permitDate = new Date(permit.filingDate);
-      return permitDate >= startDate && permitDate <= endDate;
+      return permitDate >= sixMonthsAgo && permitDate <= new Date();
     });
-    
-    // Filter by week if specified
-    if (params.weekOf) {
-      const weekStart = new Date(params.weekOf);
-      const weekEnd = new Date(weekStart);
-      weekEnd.setDate(weekEnd.getDate() + 7);
-      
-      permits = permits.filter(permit => {
-        const permitDate = new Date(permit.filingDate);
-        return permitDate >= weekStart && permitDate < weekEnd;
-      });
-    }
     
     // Filter by month if specified
     if (params.monthOf) {
@@ -87,7 +67,7 @@ export async function fetchPermitData(params: PermitSearchParams): Promise<Permi
       );
     }
     
-    // Sort newest to oldest
+    // Sort newest to oldest by default
     permits.sort((a, b) => new Date(b.filingDate).getTime() - new Date(a.filingDate).getTime());
     
     // Cache the results
@@ -382,27 +362,6 @@ export function getPermitUrl(permit: PermitData): string {
     return `https://www.kgs.ku.edu/Magellan/Qualified/index.html?api=${permit.apiNumber}`;
   }
   return '';
-}
-
-export function getWeekRanges(monthsBack: number = 6): Array<{ label: string; value: string }> {
-  const weeks: Array<{ label: string; value: string }> = [];
-  const now = new Date();
-  
-  for (let i = 0; i < monthsBack * 4; i++) {
-    const weekStart = new Date(now);
-    weekStart.setDate(now.getDate() - (i * 7));
-    weekStart.setHours(0, 0, 0, 0);
-    
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekStart.getDate() + 6);
-    
-    weeks.push({
-      label: `Week of ${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
-      value: weekStart.toISOString().split('T')[0]
-    });
-  }
-  
-  return weeks;
 }
 
 export function getMonthRanges(monthsBack: number = 6): Array<{ label: string; value: string }> {

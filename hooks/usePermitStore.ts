@@ -1,17 +1,13 @@
 import { create } from 'zustand';
 import { PermitData } from '@/types/lead';
-import { fetchPermitData, getWeekRanges } from '@/lib/permits';
+import { fetchPermitData, getMonthRanges } from '@/lib/permits';
 
 interface PermitFilters {
   state?: 'Oklahoma' | 'Kansas' | 'All';
   operator?: string;
   county?: string;
-  dateRange?: {
-    start: string;
-    end: string;
-  };
-  weekOf?: string;
   monthOf?: string;
+  sortOrder?: 'newest' | 'oldest';
 }
 
 type PermitStore = {
@@ -22,7 +18,6 @@ type PermitStore = {
   isLoading: boolean;
   error: string | null;
   lastFetch: string | null;
-  weekRanges: Array<{ label: string; value: string }>;
   monthRanges: Array<{ label: string; value: string }>;
   
   // Actions
@@ -49,32 +44,64 @@ export const usePermitStore = create<PermitStore>((set, get) => ({
   selectedPermit: null,
   filters: {
     state: 'All',
-    dateRange: {
-      start: new Date(Date.now() - 6 * 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 6 months ago
-      end: new Date().toISOString().split('T')[0] // today
-    }
+    sortOrder: 'newest'
   },
   isLoading: false,
   error: null,
   lastFetch: null,
-  weekRanges: [],
   monthRanges: [],
   
   initializeRanges: () => {
-    const weekRanges = getWeekRanges(6);
     const monthRanges = getMonthRanges(6);
-    set({ weekRanges, monthRanges });
+    set({ monthRanges });
   },
   
   setSelectedPermit: (permit) => set({ selectedPermit: permit }),
   
   setFilters: (newFilters) => {
-    set(state => ({
-      filters: { ...state.filters, ...newFilters }
-    }));
-    
-    // Auto-fetch when filters change
-    get().fetchPermits();
+    set(state => {
+      const updatedFilters = { ...state.filters, ...newFilters };
+      let filtered = state.permits;
+      
+      // Apply filters
+      if (updatedFilters.state && updatedFilters.state !== 'All') {
+        filtered = filtered.filter(permit => permit.location.state === updatedFilters.state);
+      }
+      
+      if (updatedFilters.operator) {
+        filtered = filtered.filter(permit => 
+          permit.operatorName.toLowerCase().includes(updatedFilters.operator!.toLowerCase())
+        );
+      }
+      
+      if (updatedFilters.county) {
+        filtered = filtered.filter(permit => 
+          permit.location.county.toLowerCase().includes(updatedFilters.county!.toLowerCase())
+        );
+      }
+      
+      if (updatedFilters.monthOf) {
+        const monthStart = new Date(updatedFilters.monthOf);
+        const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
+        
+        filtered = filtered.filter(permit => {
+          const permitDate = new Date(permit.filingDate);
+          return permitDate >= monthStart && permitDate <= monthEnd;
+        });
+      }
+      
+      // Apply sorting
+      filtered.sort((a, b) => {
+        const dateA = new Date(a.filingDate).getTime();
+        const dateB = new Date(b.filingDate).getTime();
+        return updatedFilters.sortOrder === 'oldest' ? dateA - dateB : dateB - dateA;
+      });
+      
+      return {
+        filters: updatedFilters,
+        filteredPermits: filtered
+      };
+    });
   },
   
   fetchPermits: async () => {
@@ -87,12 +114,17 @@ export const usePermitStore = create<PermitStore>((set, get) => ({
         state: filters.state === 'All' ? undefined : filters.state,
         operator: filters.operator,
         county: filters.county,
-        dateRange: filters.dateRange,
-        weekOf: filters.weekOf,
         monthOf: filters.monthOf
       };
       
       const permits = await fetchPermitData(searchParams);
+      
+      // Sort permits by date (newest first by default)
+      permits.sort((a, b) => {
+        const dateA = new Date(a.filingDate).getTime();
+        const dateB = new Date(b.filingDate).getTime();
+        return filters.sortOrder === 'oldest' ? dateA - dateB : dateB - dateA;
+      });
       
       set({
         permits,
@@ -101,6 +133,9 @@ export const usePermitStore = create<PermitStore>((set, get) => ({
         lastFetch: new Date().toISOString(),
         error: null
       });
+      
+      // Apply current filters
+      get().setFilters({});
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to fetch permits';
       set({
@@ -113,7 +148,6 @@ export const usePermitStore = create<PermitStore>((set, get) => ({
   },
   
   refreshPermits: async () => {
-    // Force refresh by clearing cache (if needed) and fetching
     await get().fetchPermits();
   },
   
@@ -159,20 +193,3 @@ export const usePermitStore = create<PermitStore>((set, get) => ({
   
   clearError: () => set({ error: null }),
 }));
-
-function getMonthRanges(monthsBack: number = 6): Array<{ label: string; value: string }> {
-  const months: Array<{ label: string; value: string }> = [];
-  const now = new Date();
-  
-  for (let i = 0; i < monthsBack; i++) {
-    const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
-    
-    months.push({
-      label: monthStart.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
-      value: monthStart.toISOString().split('T')[0]
-    });
-  }
-  
-  return months;
-}

@@ -5,7 +5,7 @@ import { useCompanyStore } from '@/hooks/useCompanyStore';
 import { colors } from '@/constants/colors';
 import PermitCard from '@/components/PermitCard';
 import FilterBar from '@/components/FilterBar';
-import { Search, RefreshCw, Calendar, MapPin } from 'lucide-react-native';
+import { Search, RefreshCw, Calendar, MapPin, ArrowUpDown } from 'lucide-react-native';
 
 export default function PermitsScreen() {
   const { 
@@ -14,7 +14,6 @@ export default function PermitsScreen() {
     isLoading, 
     error, 
     lastFetch,
-    weekRanges,
     monthRanges,
     setFilters, 
     fetchPermits, 
@@ -27,7 +26,6 @@ export default function PermitsScreen() {
   const { addCompaniesFromPermits } = useCompanyStore();
   
   const [searchQuery, setSearchQuery] = useState('');
-  const [viewMode, setViewMode] = useState<'week' | 'month'>('week');
   
   const stats = getPermitStats();
   
@@ -54,14 +52,14 @@ export default function PermitsScreen() {
     { id: 'Kansas', label: 'Kansas' }
   ];
   
-  const weekOptions = [
-    { id: '', label: 'All Time' },
-    ...weekRanges.map(week => ({ id: week.value, label: week.label }))
+  const monthOptions = [
+    { id: '', label: 'All Time (Past 6 Months)' },
+    ...monthRanges.map(month => ({ id: month.value, label: month.label }))
   ];
   
-  const monthOptions = [
-    { id: '', label: 'All Time' },
-    ...monthRanges.map(month => ({ id: month.value, label: month.label }))
+  const sortOptions = [
+    { id: 'newest', label: 'Newest First' },
+    { id: 'oldest', label: 'Oldest First' }
   ];
   
   const handleSearch = (text: string) => {
@@ -73,18 +71,12 @@ export default function PermitsScreen() {
     setFilters({ state: stateId as 'Oklahoma' | 'Kansas' | 'All' });
   };
   
-  const handleWeekFilter = (weekId: string) => {
-    setFilters({ weekOf: weekId || undefined, monthOf: undefined });
-  };
-  
   const handleMonthFilter = (monthId: string) => {
-    setFilters({ monthOf: monthId || undefined, weekOf: undefined });
+    setFilters({ monthOf: monthId || undefined });
   };
   
-  const handleViewModeChange = (mode: 'week' | 'month') => {
-    setViewMode(mode);
-    // Clear existing time filters when switching modes
-    setFilters({ weekOf: undefined, monthOf: undefined });
+  const handleSortChange = (sortId: string) => {
+    setFilters({ sortOrder: sortId as 'newest' | 'oldest' });
   };
   
   const handleRefresh = async () => {
@@ -163,42 +155,24 @@ export default function PermitsScreen() {
         
         <View style={styles.filterSpacer} />
         
-        <View style={styles.viewModeContainer}>
-          <TouchableOpacity
-            style={[styles.viewModeButton, viewMode === 'week' && styles.viewModeButtonActive]}
-            onPress={() => handleViewModeChange('week')}
-          >
-            <Text style={[styles.viewModeText, viewMode === 'week' && styles.viewModeTextActive]}>
-              Weekly
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.viewModeButton, viewMode === 'month' && styles.viewModeButtonActive]}
-            onPress={() => handleViewModeChange('month')}
-          >
-            <Text style={[styles.viewModeText, viewMode === 'month' && styles.viewModeTextActive]}>
-              Monthly
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-      
-      <View style={styles.timeFilterContainer}>
-        {viewMode === 'week' ? (
-          <FilterBar
-            title="Week"
-            options={weekOptions}
-            selectedId={filters.weekOf || ''}
-            onSelect={handleWeekFilter}
-          />
-        ) : (
-          <FilterBar
-            title="Month"
-            options={monthOptions}
-            selectedId={filters.monthOf || ''}
-            onSelect={handleMonthFilter}
-          />
-        )}
+        <FilterBar
+          title="Month"
+          options={monthOptions}
+          selectedId={filters.monthOf || ''}
+          onSelect={handleMonthFilter}
+        />
+        
+        <View style={styles.filterSpacer} />
+        
+        <TouchableOpacity
+          style={styles.sortButton}
+          onPress={() => handleSortChange(filters.sortOrder === 'newest' ? 'oldest' : 'newest')}
+        >
+          <ArrowUpDown size={16} color={colors.primary} />
+          <Text style={styles.sortText}>
+            {filters.sortOrder === 'newest' ? 'Newest First' : 'Oldest First'}
+          </Text>
+        </TouchableOpacity>
       </View>
       
       {lastFetch && (
@@ -228,7 +202,7 @@ export default function PermitsScreen() {
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.emptyText}>Fetching real permit data...</Text>
           <Text style={styles.emptySubtext}>
-            Loading permits from Oklahoma and Kansas
+            Loading permits from Oklahoma and Kansas (Past 6 Months)
           </Text>
         </View>
       );
@@ -249,14 +223,13 @@ export default function PermitsScreen() {
       );
     }
     
-    if (filters.weekOf || filters.monthOf) {
-      const timeFrame = filters.weekOf ? 'week' : 'month';
+    if (filters.monthOf) {
       return (
         <View style={styles.emptyContainer}>
           <Calendar size={48} color={colors.textSecondary} />
-          <Text style={styles.emptyText}>No permits filed this {timeFrame}</Text>
+          <Text style={styles.emptyText}>No permits filed this month</Text>
           <Text style={styles.emptySubtext}>
-            Try selecting a different {timeFrame} or view all time
+            Try selecting a different month or view all time
           </Text>
         </View>
       );
@@ -351,36 +324,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
     alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   filterSpacer: {
-    width: 12,
+    width: 8,
   },
-  viewModeContainer: {
+  sortButton: {
     flexDirection: 'row',
-    backgroundColor: colors.card,
-    borderRadius: 8,
-    padding: 2,
-    marginLeft: 'auto',
-  },
-  viewModeButton: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(26, 115, 232, 0.1)',
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 6,
   },
-  viewModeButtonActive: {
-    backgroundColor: colors.primary,
-  },
-  viewModeText: {
-    fontSize: 12,
-    color: colors.textSecondary,
+  sortText: {
+    color: colors.primary,
+    fontSize: 14,
     fontWeight: '500',
-  },
-  viewModeTextActive: {
-    color: 'white',
-  },
-  timeFilterContainer: {
-    paddingHorizontal: 16,
-    paddingBottom: 12,
   },
   lastFetchContainer: {
     flexDirection: 'row',
